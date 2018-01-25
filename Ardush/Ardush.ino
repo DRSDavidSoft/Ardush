@@ -3,6 +3,7 @@
 unsigned char ch;
 byte cursorPos = 0;
 
+bool isUpperCaseCMD = true;
 const unsigned int CMD_LEN = 32;
 char command[CMD_LEN + 1];
 
@@ -22,6 +23,10 @@ char escMode;
 #define ARR_DOWN  66
 #define ARR_RIGHT 67
 #define ARR_LEFT  68
+
+bool extendedMode = false;
+int ttyRows = 0, ttyCols = 0;
+//void get
 
 void sendCursor( unsigned char direction ) {
 	if ( direction > 0 ) {
@@ -63,9 +68,10 @@ void newPrompt() {
 }
 
 void execPrompt() {
+	//command = isUpperCaseCMD ? toupper(command) : command;
 	Serial.println("Executing '"+String(command)+"' command.\n");
 
-	if ( strcmp(command, "clear") == 0 ) {
+	if ( strcasecmp(command, "clear") == 0 ) {
 
 		/** Put cursor to home */
 		Serial.write( KEY_ESCAPE );
@@ -77,7 +83,19 @@ void execPrompt() {
 
 	} else
 
-	if ( strcmp(command, "test") == 0 ) {
+	if ( strcasecmp(command, "upper") == 0 ) {
+		isUpperCaseCMD = true;
+	} else	
+	if ( strcasecmp(command, "noupper") == 0 ) {
+		isUpperCaseCMD = false;
+	} else	
+
+  if ( strcasecmp(command, "led") == 0 ) {
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite( LED_BUILTIN, !digitalRead(LED_BUILTIN) );
+  } else  
+
+	if ( strcasecmp(command, "test") == 0 ) {
 
 		/** Send test code */
 		//Serial.write( KEY_ESCAPE );
@@ -86,12 +104,111 @@ void execPrompt() {
 
 	} else	
 
-	if ( strcmp(command, "exit") == 0 ) {
+	if ( strcasecmp(command, "getcur") == 0 ) {
+
+		/** Save pos */
+		sendCursor('s'); // Tell the terminal to keep the current position
+
+		/** Move to the end */
 		Serial.write( KEY_ESCAPE );
-		Serial.write( "[2J" );
+		Serial.write( "[999;999H" );
+
+		/** Query Cursor Position */
+		Serial.write( KEY_ESCAPE );
+		Serial.write( "[6n" );
+
+		unsigned int respMode = 0, respIndex = 0, charPos = 0;
+		char row[3] = {0,0,0}, column[3] = {0,0,0};
+
+		unsigned long startTime = millis();
+		unsigned long timeOut = 500; //ms
+
+		while ( millis() - startTime < timeOut ) {
+
+			if ( Serial.available() > 0 ) {
+				ch = Serial.read();
+
+				if ( respMode == 0 ) {
+					if ( ch == KEY_ESCAPE ) respMode = 1;
+					else break; // ERROR
+				}
+				
+				else
+
+				if ( respMode == 1 ) {
+					if ( ch == '[' ) {
+						respMode = 2;
+						respIndex = 0;
+					}
+					else break; // ERROR
+				}
+
+				else
+
+				if ( respMode == 2 )
+				{
+					if ( ch == ';' ) {
+						respIndex++;
+						charPos = 0;
+					} else
+					if ( ch == 'R' ) {
+						charPos = 0;
+						respIndex = 255;
+						respMode = 255;
+						break; // ERROR
+					} else
+					if ( isdigit(ch) ) {
+						if (respIndex == 0) row[charPos++] = ch; else
+						if (respIndex == 1) column[charPos++] = ch; else
+						charPos = 0;
+					}
+				}
+
+				else
+
+				if ( respMode == 255 )
+				{
+					break; // ERROR
+				}
+
+				startTime = millis();
+			}
+
+		}
+
+
+		if ( respMode > 0 ) { // No Timeout
+			/** Restore pos */
+			sendCursor('u'); // Tell the terminal to restore the position
+		} else {
+			// Escape Codes not supported
+			Serial.println("");
+		}
+
+
+		if ( respMode == 0 ) {
+			Serial.println("Timeout, no data received.");
+		} else
+
+		if ( respMode != 255 ) {
+			Serial.println("Invalid or incomplete data received.");
+		}
+
+		else {
+			//Serial.println("Received size: "+String( atoi(row) )+"x"+String( atoi(column) )+" dimension.\n");
+			Serial.println("Received size: " + String(row) + "*" + String(column) + " dimension.\n");
+		}
+
+	} else	
+
+	if ( strcasecmp(command, "exit") == 0 ) {
+		// TODO: fix this
+		Serial.write( 0x03 ); // CTRL-C
+		Serial.write( 26 ); // BREAK
+		Serial.write( 0 ); // CTRL-BREAK
 	} else
 
-	if ( strcmp(command, "keycodes") == 0 ) {
+	if ( strcasecmp(command, "keycodes") == 0 ) {
 
 		Serial.println("Keycodes debugging. Press CTRL+C to exit.");
 
@@ -233,6 +350,7 @@ void loop() {
 					shiftToRight();
 					
 					command[cursorPos++] = ch;
+					ch = isUpperCaseCMD ? toupper(ch) : ch;
 					Serial.write( ch );
 					
 					fixPos();
