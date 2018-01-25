@@ -68,8 +68,24 @@ void newPrompt() {
 }
 
 void execPrompt() {
+
+	char args[CMD_LEN + 1] = "";
+	//int argsCount = 0;
+	bool hasArguments = false;
+	
+	for (unsigned int i=0, j=0; i<sizeof(command); i++) {
+		if ( hasArguments == false ) {
+			if ( command[i] == ' ' ) { command[i] = '\0'; hasArguments = true; }
+		}
+		else {
+			args[j++] = command[i];
+		}
+	}
+	
 	//command = isUpperCaseCMD ? toupper(command) : command;
-	Serial.println("Executing '"+String(command)+"' command.\n");
+	Serial.println("Executing '"+String(command)+"' command.");
+	if (hasArguments) Serial.println("With arguments: " + String(args));
+	Serial.println("");
 
 	if ( strcasecmp(command, "clear") == 0 ) {
 
@@ -89,11 +105,15 @@ void execPrompt() {
 	if ( strcasecmp(command, "noupper") == 0 ) {
 		isUpperCaseCMD = false;
 	} else	
+		
+	if ( strcasecmp(command, "echo") == 0 ) {
+		Serial.println( String(args) );
+	} else
 
-  if ( strcasecmp(command, "led") == 0 ) {
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite( LED_BUILTIN, !digitalRead(LED_BUILTIN) );
-  } else  
+	if ( strcasecmp(command, "led") == 0 ) {
+		//pinMode(LED_BUILTIN, OUTPUT);
+		digitalWrite( LED_BUILTIN, !digitalRead(LED_BUILTIN) );
+	} else	
 
 	if ( strcasecmp(command, "test") == 0 ) {
 
@@ -206,6 +226,7 @@ void execPrompt() {
 		Serial.write( 0x03 ); // CTRL-C
 		Serial.write( 26 ); // BREAK
 		Serial.write( 0 ); // CTRL-BREAK
+		Serial.println("logout");
 	} else
 
 	if ( strcasecmp(command, "keycodes") == 0 ) {
@@ -226,12 +247,15 @@ void execPrompt() {
 	}
 
 	else
-	Serial.println("Command not found.");
+	Serial.println("Command not found.\n");
 
 }
 
 void setup() {
 	Serial.begin(9600);
+	
+	pinMode(LED_BUILTIN, OUTPUT);
+	digitalWrite(LED_BUILTIN, LOW);
 
 	newPrompt();
 }
