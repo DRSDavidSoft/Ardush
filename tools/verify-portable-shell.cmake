@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../portable-shell.lock" lines)
-set(required portable_terminal.h portable_editor.h portable_parse.h portable_probe.h portable_shell_editor.hpp portable_device_view.hpp LICENSE)
+set(required portable_terminal.h portable_editor.h portable_parse.h portable_probe.h portable_shell_editor.hpp portable_device_view.hpp portable_device_table.inc portable_style.h LICENSE)
 foreach(line IN LISTS lines)
   if(line MATCHES "^([0-9a-fA-F]+)  (.+)$")
     set(expected "${CMAKE_MATCH_1}")
