@@ -1,5 +1,29 @@
 # Integration evidence — 2026-10-29
 
+## 2.1 semantic naming update
+
+The active implementation now uses `portable_console_*` / `PS_CONSOLE_*` and
+`SerialConsole/SerialConsole.ino`. Original identifiers and commits below are
+historical provenance. Public includes/macros and host invocations must migrate
+together; command behavior, legacy guards and hardware ownership are preserved.
+The prompt and view label default to `Console` and are compile-time configurable.
+
+After renaming, all six native suites and the batch smoke check pass. Uno, Mega
+with the view enabled, and STM32F103C8 with the view enabled compile and link:
+
+| Profile | Flash bytes | Static RAM bytes |
+| --- | ---: | ---: |
+| Uno | 9,042 | 1,149 |
+| Mega2560 + view | 21,948 | 2,749 |
+| STM32F103C8 + view | 26,108 | 2,224 |
+
+The tiny AVR increase is from the neutral console label; these are link-time
+measurements, not physical-board stack or interrupt-load evidence. Four updated
+previews replay actual emitted bytes with a simulated LED. Shared headers are
+repinned to the semantic-name upstream release; exact revision is in the lock.
+
+## Earlier 2.0 integration evidence
+
 Source comparison: all of the original DRSDavidSoft/Ardush `29be66c` sketch,
 README and MIT license were read. No history was rewritten. The replacement
 preserves the nine commands through shared components and small application

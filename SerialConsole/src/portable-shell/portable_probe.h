@@ -1,7 +1,7 @@
 #ifndef PORTABLE_PROBE_H
 #define PORTABLE_PROBE_H
 #include "portable_terminal.h"
-/* Ardush's getcur terminal-size query, rewritten as a bounded event decoder.
+/* Terminal-size query with a bounded, nonblocking event decoder.
  * A host supplies monotonic uint32_t ticks, including rollover, and calls tick
  * even without input. Never waits or reads a transport. Every consumed byte is
  * part of the pending reply; unrelated bytes are replayed to the owning editor.

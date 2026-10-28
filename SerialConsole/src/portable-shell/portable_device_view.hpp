@@ -2,14 +2,13 @@
 #define PORTABLE_DEVICE_VIEW_HPP
 #include "portable_shell_editor.hpp"
 /* MIT Copyright (c) 2026 AtomicDeploy contributors. Canonical snapshot/action
- * device view imported from PakarController b09650e3. Hardware calls and routing
+ * device view. Source lineage is in the donor inventory. Hardware calls and routing
  * stay with the caller. Include only in products requiring this optional view. */
 #ifndef PS_DEVICE_VIEW_DIAGNOSTICS
 #define PS_DEVICE_VIEW_DIAGNOSTICS 1
 #endif
-// Allocation-free device-owned presentation. Adapted from RayanLamp's keys,
-// formIsFiltering, deterministic runtime model, bounded terminal renderer and
-// sanitization, not its lamp business logic, Go runtime or host networking.
+// Allocation-free device presentation with filtering, deterministic state,
+// bounded rendering and sanitized text. The caller owns application behavior.
 // Snapshots are observations; only the caller's common router may authorize
 // and execute an explicit Action. Entering/rendering never produces an action.
 namespace PortableShell {

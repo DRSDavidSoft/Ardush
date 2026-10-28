@@ -1,8 +1,8 @@
 #ifndef PORTABLE_TERMINAL_H
 #define PORTABLE_TERMINAL_H
 /* MIT, Copyright (c) 2026 AtomicDeploy and PortableShell contributors.
- * Shared byte-only terminal primitives. Adapted from PakarController b09650e3,
- * TelnetShell.h (PU850/RayanLamp lineage) and PortableShell 12bfe710.
+ * Shared byte-only terminal primitives. Source lineage is recorded in the
+ * repository integration documents and donor inventory.
  * Header-only C99: no allocator, system calls, or required library functions.
  * Callbacks consume bytes synchronously. One owner per state object. */
 #include <stddef.h>
