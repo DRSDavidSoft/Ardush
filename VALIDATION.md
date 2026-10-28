@@ -21,8 +21,8 @@ callbacks; it does not retain an independently maintained duplicate editor.
 Shared code is owned by atomicdeploy/portable-shell. PR #4 merged as
 `10b7d29469690822d8ee687a6d27a36977e9c194`, with all 12 native/profile/AVR/ARM
 checks passing. The post-merge run `40763095245` also passed. Ardush's lock pins
-the identical source from `5132c53d1cbb6b2a907aaa67f211ee5b0bb9ab79`, an ancestor
-of that merge. Pakar's consumer update is tracked separately in PR #36; its
+that exact merge; its shared headers match the tested PR head
+`5132c53d1cbb6b2a907aaa67f211ee5b0bb9ab79`. Pakar's consumer update is tracked separately in PR #36; its
 application ownership and hardware acceptance are not inferred from these tests.
 
 ## Local build measurements
