@@ -1,0 +1,48 @@
+name: Ardush byte core and boards
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build --config Debug
+      - run: ctest --test-dir build -C Debug --output-on-failure
+  boards:
+    strategy:
+      matrix:
+        include:
+          - core: arduino:avr@1.8.8
+            fqbn: arduino:avr:uno
+            flags: '-DARDUSH_ENABLE_DEVICE_VIEW=0'
+          - core: arduino:avr@1.8.8
+            fqbn: arduino:avr:mega:cpu=atmega2560
+            flags: '-DARDUSH_ENABLE_DEVICE_VIEW=1'
+          - core: STMicroelectronics:stm32@3.0.0
+            fqbn: STMicroelectronics:stm32:GenF1:pnum=GENERIC_F103C8TX
+            flags: '-DARDUSH_LED_PIN=PC13 -DARDUSH_LED_ACTIVE_LOW=1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - run: arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
+      - run: arduino-cli core install ${{ matrix.core }} --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
+      - run: cmake -P tools/verify-portable-shell.cmake
+      - run: arduino-cli compile --fqbn '${{ matrix.fqbn }}' --build-property 'compiler.cpp.extra_flags=${{ matrix.flags }}' --build-path build/board Ardush
+  avr-simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-avr avr-libc simavr
+      - run: avr-gcc -std=c99 -Os -ffreestanding -fno-builtin -fno-tree-loop-distribute-patterns -mmcu=atmega328p -DF_CPU=16000000UL -IArdush/src tests/avr_smoke.c -o smoke.elf
+      - name: Exercise AVR code with bounded emulator lifetime
+        run: |
+          timeout 10 simavr -m atmega328p -f 16000000 smoke.elf > smoke.log 2>&1 || test "$?" = 124
+          cat smoke.log
+          grep ARDUSH_AVR_PASS smoke.log
+          ! grep ARDUSH_AVR_FAIL smoke.log
