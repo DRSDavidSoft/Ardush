@@ -18,14 +18,29 @@ int main() {
 #else
     assert(out.find("\xe2\x86\x91/\xe2\x86\x93") != std::string::npos);
 #endif
+    out.clear(); feed(&s, "\r\025on");
+    assert(!led && writes == 0 && portable_console_ui.view.editing());
+#if PS_DEVICE_VIEW_INLINE_EDIT
+    assert(out.find("\033[4;29H") != std::string::npos && out.find("Edit LED:") == std::string::npos);
+#else
+    assert(out.find("Edit LED:") != std::string::npos);
+#endif
+    feed(&s, "\033"); portable_console_tick(&s, 35); portable_console_view_tick(&s);
+    assert(!led && writes == 0 && !portable_console_ui.view.editing());
     feed(&s, "\r\025on\r"); assert(led && writes == 1);
     feed(&s, "\t"); assert(portable_console_ui.view.page() == PortableShell::DeviceView::Network);
     feed(&s, "\r"); assert(writes == 1 && !portable_console_ui.view.editing());
     feed(&s, "\t"); assert(portable_console_ui.view.page() == PortableShell::DeviceView::TerminalPage);
     feed(&s, "\r\025off\r"); assert(!s.editor.upper && writes == 1);
-    feed(&s, "\033"); portable_console_tick(&s, 35); portable_console_view_tick(&s);
+    feed(&s, "\033"); portable_console_tick(&s, 70); portable_console_view_tick(&s);
     assert(s.mode == PS_CONSOLE_PROMPT && out.find("\033[?1049l") != std::string::npos);
     feed(&s, "plain\r"); out.clear(); feed(&s, "view\r");
     assert(out.find('\033') == std::string::npos);
+    out.clear(); feed(&s, "\r\025off");
+    assert(out.find('\033') == std::string::npos);
+#if PS_DEVICE_VIEW_INLINE_EDIT
+    assert(out.find("Edit LED:") == std::string::npos);
+#endif
+    assert(out.find("off") != std::string::npos && led && writes == 1);
     std::printf("SerialConsole view tabs/edit/exit checks passed; view=%u bytes\n", (unsigned)sizeof portable_console_ui);
 }
