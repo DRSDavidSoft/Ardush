@@ -1,5 +1,5 @@
 # https://github.com/atomicdeploy/portable-shell
-# commit 5132c53d1cbb6b2a907aaa67f211ee5b0bb9ab79
+# commit 10b7d29469690822d8ee687a6d27a36977e9c194
 4b95ce09b9a7bc4c2e5d7e3076d9a5257bed84e2ff2d63d5309841f9bc4d6ee9  portable_terminal.h
 cb0067ca358c9c86cd64727681186014cff0ce18b17edcfb48521ce75a0f9a0b  portable_editor.h
 163c294fecf8f715a2ba9912fe06b4030d00a7e16107ed08a806b62d252d23d7  portable_parse.h
