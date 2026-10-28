@@ -76,6 +76,10 @@ prompt. Uppercase echo transforms display only. Input editing is ASCII; the
 renderer can emit Unicode borders/key symbols. History is bounded and uses the
 shared credential-filtering policy. The view stages edits until Enter; Esc
 cancels. Only explicit accepted actions reach the GPIO callback.
+Editable values now use highlighted cells inside the table. Typing does not
+actuate hardware; Enter applies, and Esc cancels the draft. Long values scroll
+within their cells. Define `PS_DEVICE_VIEW_INLINE_EDIT=0` to select the older
+below-table layout when integrating the shared view.
 
 Custom callbacks are registered in the sketch's immutable `commands[]`. They
 can override built-ins and receive up to eight parsed arguments, including argv0.

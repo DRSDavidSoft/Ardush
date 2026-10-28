@@ -7,6 +7,9 @@
 #ifndef PS_DEVICE_VIEW_DIAGNOSTICS
 #define PS_DEVICE_VIEW_DIAGNOSTICS 1
 #endif
+#ifndef PS_DEVICE_VIEW_INLINE_EDIT
+#define PS_DEVICE_VIEW_INLINE_EDIT 1
+#endif
 // Allocation-free device presentation with filtering, deterministic state,
 // bounded rendering and sanitized text. The caller owns application behavior.
 // Snapshots are observations; only the caller's common router may authorize
@@ -330,7 +333,7 @@ class DeviceView {
         if (!dirty_ && !force)
             return false;
         dirty_ = false;
-        if (editing_ && !full_ && !force) {
+        if (editing_ && ansi_ && columns_ >= 40 && lines_ >= 16 && !full_ && !force) {
             editLine(write);
             return true;
         }
@@ -428,7 +431,10 @@ class DeviceView {
                     out.raw(row.editable ? "  " : "- ");
                     if (ansi_)
                         out.raw(selected ? "\x1b[1;35m" : "\x1b[0m");
-                    out.field(row.secret ? "[hidden]" : row.value, width - labelWidth - 9);
+                    if (PS_DEVICE_VIEW_INLINE_EDIT && editing_ && selected)
+                        editValue(out, width - labelWidth - 9);
+                    else
+                        out.field(row.secret ? "[hidden]" : row.value, width - labelWidth - 9);
                     if (ansi_)
                         out.raw("\x1b[0m");
                 } else
@@ -537,6 +543,14 @@ class DeviceView {
             out.raw("\x1b[0m");
         out.safe(notice_, width - 1);
         out.raw("\r\n");
+        if (PS_DEVICE_VIEW_INLINE_EDIT) {
+            if (ansi_) {
+                out.raw("\x1b[J");
+                if (editing_)
+                    editLine(write);
+            }
+            return true;
+        }
         if (ansi_) {
             out.raw("\x1b[J");
             char position[24];
@@ -873,6 +887,24 @@ class DeviceView {
         dirty_ = true;
         return false;
     }
+    size_t editCapacity() const {
+        const size_t width = columns_ < 40 ? 40 : columns_ > 100 ? 100 : columns_;
+        return width - (width < 60 ? 12 : 22) - 9;
+    }
+    size_t editStart(size_t capacity) const {
+        return cursor_ >= capacity ? cursor_ - capacity + 1 : 0;
+    }
+    template <typename Write> void editValue(Writer<Write> &out, size_t capacity) const {
+        const size_t length = ps_text_length(draft_), start = editStart(capacity);
+        char visible[101]{};
+        for (size_t i = 0; i < capacity && start + i < length; ++i)
+            visible[i] = secret_ ? '*' : draft_[start + i];
+        if (ansi_)
+            out.raw("\x1b[7m");
+        out.field(visible, capacity);
+        if (ansi_)
+            out.raw("\x1b[0m");
+    }
     template <typename Write> void editText(Writer<Write> &out) const {
         char label[19];
         terminalText(label, sizeof(label), editLabel_);
@@ -895,10 +927,28 @@ class DeviceView {
         }
     }
     unsigned editorRow() const {
+        if (PS_DEVICE_VIEW_INLINE_EDIT) {
+            const unsigned visible = page_ == Led ? (lines_ < 24 ? 1 : 4)
+                                      : lines_ < 24 ? 4 : 8;
+            return 4 + (selected_ < visible ? selected_ : visible - 1);
+        }
         return lines_ > 24 ? 23 : lines_ - 1;
     }
     template <typename Write> void editLine(Write write) const {
         Writer<Write> out(write, ansi_);
+        if (PS_DEVICE_VIEW_INLINE_EDIT) {
+            const unsigned column = (columns_ < 60 ? 12 : 22) + 7;
+            char position[24];
+            ps_terminal_format(position, sizeof(position), "\x1b[%u;%uH", editorRow(), column);
+            out.raw(position);
+            const size_t capacity = editCapacity();
+            editValue(out, capacity);
+            ps_terminal_format(position, sizeof(position), "\x1b[%u;%uH", editorRow(),
+                               column + static_cast<unsigned>(cursor_ - editStart(capacity)));
+            out.raw(position);
+            out.raw("\x1b[?25h");
+            return;
+        }
         if (ansi_) {
             char position[24];
             ps_terminal_format(position, sizeof(position), "\x1b[%u;1H\x1b[2K", editorRow());

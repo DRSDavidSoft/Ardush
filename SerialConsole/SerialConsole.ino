@@ -52,7 +52,7 @@ static void led_set(void *, int on) {
 #endif
 }
 /* Add commands here; callbacks receive decoded arguments and caller state. */
-static void version(portable_console *s, unsigned, char *const *) { portable_console_put(s, "Console 2.1\r\n"); }
+static void version(portable_console *s, unsigned, char *const *) { portable_console_put(s, "Console 2.2\r\n"); }
 static const portable_console_command commands[] = {
     {"version", version},
 #if PS_CONSOLE_ENABLE_DEVICE_VIEW

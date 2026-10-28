@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SerialConsole VERSION 2.1.0 LANGUAGES C CXX)
+project(SerialConsole VERSION 2.2.0 LANGUAGES C CXX)
 enable_testing()
 add_library(portable_console INTERFACE)
 target_include_directories(portable_console INTERFACE SerialConsole/src)

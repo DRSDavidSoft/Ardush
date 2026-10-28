@@ -1,5 +1,19 @@
 # Integration evidence — 2026-10-29
 
+## 2.2 in-cell editing
+
+The shared device view now edits values inside the selected table cell. Drafts
+are highlighted, horizontally bounded and preserved across resize; Enter applies
+and Esc cancels. The console regression checks send actual key bytes and verify
+that no LED write occurs before acceptance or on cancellation. Plain rendering
+also updates the table value without escape codes. Six native suites pass.
+
+The optional previous footer layout remains behind `PS_DEVICE_VIEW_INLINE_EDIT=0`.
+The updated edit preview is a replay of emitted bytes with a simulated LED, not
+physical board evidence. Mega2560 with the view builds at 22,014 flash / 2,735
+static RAM bytes; STM32F103C8 with the view builds at 26,148 / 2,224 bytes.
+These remain linker measurements rather than physical stack measurements.
+
 ## 2.1 semantic naming update
 
 The active implementation now uses `portable_console_*` / `PS_CONSOLE_*` and
