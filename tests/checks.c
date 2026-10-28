@@ -20,7 +20,7 @@ int main(void) {
     assert(strstr(out, "Ardush> ") && s.editor.upper);
     feed(&s, "noupper\r\ncustom 'a b' \"\" c\\ d\r\n"); assert(calls == 1 && !s.editor.upper);
     feed(&s, "custom 'bad\r"); assert(calls == 1 && strstr(out, "unclosed quote"));
-    clear_output(); feed(&s, "echo  \"raw\"\r"); assert(strstr(out, " \"raw\"\r\n"));
+    clear_output(); feed(&s, "echo  \"raw\"\r");
     feed(&s, "leX\b\t\r\n"); assert(led && writes == 1);
     feed(&s, "\033[A\r"); assert(!led && writes == 2);
     feed(&s, "led on\rled bad\r"); assert(led && writes == 3);
@@ -38,12 +38,25 @@ int main(void) {
     feed(&s, "help\rstatus\rhistory-clear\r"); assert(!s.editor.count && strstr(out, "custom\r\n"));
     clear_output(); feed(&s, "plain\r"); clear_output(); feed(&s, "echo hello\r"); assert(!strchr(out, 27));
     feed(&s, "ansi\r"); assert(s.editor.ansi);
-    feed(&s, "exit\rled\r"); assert(s.mode == ARDUSH_CLOSED && writes == 3);
+    clear_output(); feed(&s, "exit\rled\r"); assert(s.mode == ARDUSH_CLOSED && writes == 3);
+#if ARDUSH_LEGACY_EXIT_BYTES
+    { char *exit_bytes = (char *)memchr(out, 3, used); assert(exit_bytes && exit_bytes[1] == 26 && exit_bytes[2] == 0); }
+#else
+    assert(!memchr(out, 3, used));
+#endif
     clear_output(); ardush_init(&s, port, commands, 1, 0); feed(&s, "echo ok\nstatus\ngetcur\n");
     assert(!strchr(out, 27) && !strstr(out, "Ardush>") && !strncmp(out, "ok\r\n", 4));
     assert(strstr(out, "interactive only") && s.status == 3);
     feed(&s, "missing\n"); assert(s.status == 127);
     feed(&s, "echo success\n"); assert(s.status == 0);
+    clear_output(); feed(&s, "echo  \"raw\"\n");
+#if ARDUSH_RAW_ECHO
+    assert(!strcmp(out, " \"raw\"\r\n"));
+#else
+    assert(!strcmp(out, "raw\r\n"));
+#endif
+    { const ardush_command override[] = {{"echo", custom}};
+      ardush_init(&s, port, override, 1, 0); feed(&s, "echo 'a b' \"\" c\\ d\n"); assert(calls == 2); }
     printf("Ardush command/editor/probe/batch checks passed; session=%u bytes\n", (unsigned)sizeof s);
     return 0;
 }

@@ -66,9 +66,9 @@ not shell storage. The shell itself does not allocate.
 
 ## Functional and visual checks
 
-Four native suites pass: application command/editor/probe/batch checks,
+Six native suites pass: application command/editor/probe/batch checks,
 device-view tab/edit/cancel/exit checks, Telnet framing/NAWS/dumb-terminal checks,
-and exact shared-source hashes. PortableShell's seven suites also pass with
+exact shared-source hashes, and guarded legacy/libc/ASCII configurations. PortableShell's seven suites also pass with
 both freestanding and optional libc backends. Software decimal conversion was
 checked across all 65,536 AVR unsigned values and the host unsigned maximum.
 

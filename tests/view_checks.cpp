@@ -13,6 +13,11 @@ int main() {
     ardush_init(&s, port, commands, 1, 1); feed(&s, "view\r\n");
     assert(s.mode == ARDUSH_VIEW && writes == 0 && !ardush_ui.view.editing());
     assert(out.find("\033[?1049h") != std::string::npos && out.find("LED") != std::string::npos);
+#ifdef ARDUSH_ASCII_ONLY
+    for (unsigned char byte : out) assert(byte < 128);
+#else
+    assert(out.find("\xe2\x86\x91/\xe2\x86\x93") != std::string::npos);
+#endif
     feed(&s, "\r\025on\r"); assert(led && writes == 1);
     feed(&s, "\t"); assert(ardush_ui.view.page() == PortableShell::DeviceView::Network);
     feed(&s, "\r"); assert(writes == 1 && !ardush_ui.view.editing());
