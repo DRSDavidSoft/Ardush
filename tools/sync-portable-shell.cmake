@@ -7,7 +7,7 @@ execute_process(COMMAND git status --porcelain -- include LICENSE WORKING_DIRECT
 if(dirty OR NOT revision STREQUAL PORTABLE_SHELL_REVISION)
   message(FATAL_ERROR "Require clean shared files and an explicit matching PORTABLE_SHELL_REVISION")
 endif()
-set(destination "${CMAKE_CURRENT_LIST_DIR}/../Ardush/src/portable-shell")
+set(destination "${CMAKE_CURRENT_LIST_DIR}/../SerialConsole/src/portable-shell")
 file(MAKE_DIRECTORY "${destination}")
 set(manifest "# https://github.com/atomicdeploy/portable-shell\n# commit ${revision}\n")
 foreach(name portable_terminal.h portable_editor.h portable_parse.h portable_probe.h portable_shell_editor.hpp portable_device_view.hpp)

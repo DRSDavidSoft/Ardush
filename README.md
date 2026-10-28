@@ -1,8 +1,16 @@
-# Ardush
+# SerialConsole
+
+The repository keeps its historical name and attribution. Reusable code uses
+`portable_console_*`, `PS_CONSOLE_*`, and `SerialConsole/SerialConsole.ino`.
+Update old `ardush_*` / `ARDUSH_*` identifiers and includes together; old
+product-named aliases are not compiled into this implementation. Git history is retained.
+
+`PS_CONSOLE_PROMPT_LABEL` and `PS_CONSOLE_TITLE` default to `Console`. Prompt storage
+is checked at compile time. See the [shared profiles and defaults](https://github.com/atomicdeploy/portable-shell/blob/main/OPTIONS.md).
 A byte-driven C99 shell for Arduino AVR and STM32 boards, compatible with PuTTY
 and ordinary serial terminals. The optional device view uses freestanding C++11.
 No allocation, Arduino calls, OS APIs or external runtime is used in the shell
-components. `Ardush.ino` alone connects them to the board SDK's serial/GPIO APIs.
+components. `SerialConsole.ino` alone connects them to the board SDK's serial/GPIO APIs.
 
 Ardush consumes exact, hash-pinned components from
 [PortableShell](https://github.com/atomicdeploy/portable-shell), also used by
@@ -21,16 +29,16 @@ renderer. The Uno profile omits the view to preserve its 2 KB SRAM budget.
 
 ## Build and connect
 
-Open `Ardush/Ardush.ino` in Arduino IDE, or use Arduino CLI. The commands below
+Open `SerialConsole/SerialConsole.ino` in Arduino IDE, or use Arduino CLI. The commands below
 compile only. No upload, board reset or live connection occurs automatically.
 
 ```text
 arduino-cli core install arduino:avr@1.8.8
-arduino-cli compile --fqbn arduino:avr:uno Ardush
-arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 --build-property compiler.cpp.extra_flags=-DARDUSH_ENABLE_DEVICE_VIEW=1 Ardush
+arduino-cli compile --fqbn arduino:avr:uno SerialConsole
+arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 --build-property compiler.cpp.extra_flags=-DPS_CONSOLE_ENABLE_DEVICE_VIEW=1 SerialConsole
 arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
 arduino-cli core install STMicroelectronics:stm32@3.0.0 --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
-arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1:pnum=GENERIC_F103C8TX --build-property "compiler.cpp.extra_flags=-DARDUSH_LED_PIN=PC13 -DARDUSH_LED_ACTIVE_LOW=1" Ardush
+arduino-cli compile --fqbn STMicroelectronics:stm32:GenF1:pnum=GENERIC_F103C8TX --build-property "compiler.cpp.extra_flags=-DPS_CONSOLE_LED_PIN=PC13 -DPS_CONSOLE_LED_ACTIVE_LOW=1" SerialConsole
 ```
 
 The default serial transport is `Serial` at **9600 baud**. For the generic
@@ -42,16 +50,16 @@ chosen Arduino serial implementation.
 
 | Build setting | Default / purpose |
 | --- | --- |
-| `ARDUSH_SERIAL`, `ARDUSH_BAUD` | `Serial`, `9600`; choose `Serial1` where supported |
-| `ARDUSH_LED_PIN` | `LED_BUILTIN`, or `-1` to disable hardware access |
-| `ARDUSH_LED_ACTIVE_LOW` | `0`; set `1` for an active-low LED such as the configured PC13 fixture |
-| `ARDUSH_INTERACTIVE` | `1`; `0` selects plain, prompt-free command streams |
-| `ARDUSH_ENABLE_DEVICE_VIEW` | `0` on AVR, `1` elsewhere; Mega can explicitly enable it |
-| `ARDUSH_ASCII_ONLY` | Define to suppress Unicode in the view; `plain` also disables ANSI/Unicode at runtime |
-| `ARDUSH_RAW_ECHO` | `1` preserves exact old echo spacing/quotes; `0` prints parsed arguments |
-| `ARDUSH_LEGACY_EXIT_BYTES` | `0`; `1` also emits the original Ctrl-C/Ctrl-Z/NUL sequence on interactive exit |
+| `PS_CONSOLE_SERIAL`, `PS_CONSOLE_BAUD` | `Serial`, `9600`; choose `Serial1` where supported |
+| `PS_CONSOLE_LED_PIN` | `LED_BUILTIN`, or `-1` to disable hardware access |
+| `PS_CONSOLE_LED_ACTIVE_LOW` | `0`; set `1` for an active-low LED such as the configured PC13 fixture |
+| `PS_CONSOLE_INTERACTIVE` | `1`; `0` selects plain, prompt-free command streams |
+| `PS_CONSOLE_ENABLE_DEVICE_VIEW` | `0` on AVR, `1` elsewhere; Mega can explicitly enable it |
+| `PS_CONSOLE_ASCII_ONLY` | Define to suppress Unicode in the view; `plain` also disables ANSI/Unicode at runtime |
+| `PS_CONSOLE_RAW_ECHO` | `1` preserves exact old echo spacing/quotes; `0` prints parsed arguments |
+| `PS_CONSOLE_LEGACY_EXIT_BYTES` | `0`; `1` also emits the original Ctrl-C/Ctrl-Z/NUL sequence on interactive exit |
 | `PS_EDITOR_CAPACITY`, `PS_EDITOR_HISTORY` | `64`, `2`; consistent across translation units |
-| `PS_EDITOR_PROMPT_BYTES`, `PS_EDITOR_SUGGEST_BYTES` | `12`, `24`; Ardush prompt needs at least 7 bytes |
+| `PS_EDITOR_PROMPT_BYTES`, `PS_EDITOR_SUGGEST_BYTES` | `12`, `24`; prompt storage includes the terminating NUL |
 | `PS_TERMINAL_SOFT_DIV10` | AVR adapter enables shift/subtract; other hosts keep native compiler optimization |
 
 ## Commands and reuse
@@ -75,26 +83,26 @@ Decoded argument pointers are valid only during the callback. Store application
 state in `port.context`. Callbacks can set `s->status` for batch consumers.
 
 ```c
-static void greet(ardush *s, unsigned argc, char *const *argv) {
+static void greet(portable_console *s, unsigned argc, char *const *argv) {
     if (argc != 2) { s->status = 2; return; }
-    ardush_put(s, argv[1]);
-    ardush_put(s, "\r\n");
+    portable_console_put(s, argv[1]);
+    portable_console_put(s, "\r\n");
 }
-static const ardush_command commands[] = {{"greet", greet}};
-/* ardush_init(&state, port, commands, 1, interactive);
-   For each byte: ardush_feed(&state, byte);
-   Even without input: ardush_tick(&state, monotonic_milliseconds); */
+static const portable_console_command commands[] = {{"greet", greet}};
+/* portable_console_init(&state, port, commands, 1, interactive);
+   For each byte: portable_console_feed(&state, byte);
+   Even without input: portable_console_tick(&state, monotonic_milliseconds); */
 ```
 
 `getcur` uses a fixed 500 ms total deadline and never reads or waits inside the
 shell. `keycodes` is an input mode, not a blocking loop. `exit` closes the session;
 reinitialize explicitly when the host accepts a new connection.
 
-`src/ardush_telnet.h` optionally wraps the same application in the canonical
+`src/portable_console_telnet.h` optionally wraps the same application in the canonical
 Telnet negotiator, with NAWS/terminal type, fragmented IAC handling and escaped
 output. It uses only byte callbacks. It does **not** open TCP sockets or add
 authentication. The transport owner supplies those policies and ordered writes;
-serial uses `ardush_feed` directly. A view owner calls `ardush_telnet_decode` and
+serial uses `portable_console_feed` directly. A view owner calls `portable_console_telnet_decode` and
 passes DATA bytes to its view's `feed`. Reuse PortableShell/Pakar host adapters
 where appropriate; never start a second hardware/session owner.
 
@@ -106,8 +114,8 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-The optional `ardush_batch` host accepts stdin or **one complete command per
-program argument**, e.g. `ardush_batch "echo hello" "status"`. It has no GPIO:
+The optional `portable_console_batch` host accepts stdin or **one complete command per
+program argument**, e.g. `portable_console_batch "echo hello" "status"`. It has no GPIO:
 LED state is `unknown`. The final command determines exit status: 0 success,
 2 invalid input, 3 unavailable capability, 127 unknown command. Compiler tools,
 test assertions, stdio and SDKs belong to build/test/adapter domains, not core.

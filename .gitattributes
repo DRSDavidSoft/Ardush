@@ -1,4 +1,4 @@
 * text=auto
-Ardush/src/portable-shell/* text eol=lf
+SerialConsole/src/portable-shell/* text eol=lf
 portable-shell.lock text eol=lf
 *.png binary

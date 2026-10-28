@@ -1,7 +1,7 @@
 #ifndef PORTABLE_EDITOR_H
 #define PORTABLE_EDITOR_H
 #include "portable_terminal.h"
-/* Event editor profile, adapted from PakarController TelnetShell.h b09650e3.
+/* Bounded event editor profile; source lineage is in the donor inventory.
  * No command execution, allocation or application state. Hidden by default.
  * Compile separately from the full session when a firmware already owns its
  * dispatcher and TUI. Capacity macros must agree in all consuming units. */
