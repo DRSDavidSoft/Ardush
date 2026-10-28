@@ -1,0 +1,7 @@
+/build/
+/bin/
+*.o
+*.elf
+*.hex
+*.bin
+*.su
