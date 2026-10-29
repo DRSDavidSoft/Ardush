@@ -740,7 +740,7 @@ class DeviceView {
             return false;
         }
         if (grid_ && page_ == Led && s.canLeds) {
-            if(s.cellStaggered&&(key=='A'||key=='B'||key=='C'||key=='D')){
+            if(PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_MATRIX&&s.cellStaggered&&(key=='A'||key=='B'||key=='C'||key=='D')){
                 const unsigned n=cell_-1,x=2*(n%10)+(n/10)%2,y=n/20;
                 const int nx=int(x)+(key=='C'?1:key=='D'?-1:0),ny=int(y)+(key=='B'?1:key=='A'?-1:0);
                 if(nx>=0&&nx<20&&ny>=0&&ny<4)cell_=uint8_t(ny*20+(nx%2)*10+nx/2+1);
