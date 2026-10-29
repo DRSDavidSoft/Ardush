@@ -1,6 +1,7 @@
 #ifndef PORTABLE_DEVICE_VIEW_HPP
 #define PORTABLE_DEVICE_VIEW_HPP
 #include "portable_shell_editor.hpp"
+#include "portable_style.h"
 /* MIT Copyright (c) 2026 AtomicDeploy contributors. Canonical snapshot/action
  * device view. Source lineage is in the donor inventory. Hardware calls and routing
  * stay with the caller. Include only in products requiring this optional view. */
@@ -10,6 +11,27 @@
 #ifndef PS_DEVICE_VIEW_INLINE_EDIT
 #define PS_DEVICE_VIEW_INLINE_EDIT 1
 #endif
+#ifndef PS_DEVICE_VIEW_TABLE
+#define PS_DEVICE_VIEW_TABLE 1
+#endif
+#ifndef PS_DEVICE_VIEW_WIDGETS
+#define PS_DEVICE_VIEW_WIDGETS 1
+#endif
+#ifndef PS_DEVICE_VIEW_DIALOGS
+#define PS_DEVICE_VIEW_DIALOGS 1
+#endif
+#ifndef PS_DEVICE_VIEW_MAX_ROWS
+#define PS_DEVICE_VIEW_MAX_ROWS 64
+#endif
+#ifndef PS_DEVICE_VIEW_FRAME_BYTES
+#define PS_DEVICE_VIEW_FRAME_BYTES 32768
+#endif
+#if PS_DEVICE_VIEW_TABLE && PS_DEVICE_VIEW_FRAME_BYTES < 16384
+#error Rich tables require a frame budget of at least 16384 bytes
+#endif
+#if PS_DEVICE_VIEW_MAX_ROWS < 1 || PS_DEVICE_VIEW_MAX_ROWS > 255
+#error PS_DEVICE_VIEW_MAX_ROWS must be in 1..255
+#endif
 // Allocation-free device presentation with filtering, deterministic state,
 // bounded rendering and sanitized text. The caller owns application behavior.
 // Snapshots are observations; only the caller's common router may authorize
@@ -17,6 +39,8 @@
 namespace PortableShell {
 class DeviceView {
   public:
+    enum Theme : uint8_t { Violet, Red, Lumen, OneDark };
+    enum Kind : uint8_t { Text, Toggle, Level, Choice };
     enum Page : uint8_t {
         Device,
         Network,
@@ -35,6 +59,13 @@ class DeviceView {
         const char *value = nullptr;
         bool editable = false;
         bool secret = false;
+        Kind kind = Text;
+        const char *category = "";
+        uint32_t minimum = 0, maximum = 65535, step = 1;
+        const char *const *choices = nullptr;
+        uint8_t choiceCount = 0;
+        bool pending = false;
+        bool meter = false; // Meaningful bounded levels/PWM, not ports or timestamps.
         constexpr Row(const char *label_ = nullptr, const char *key_ = nullptr,
                       const char *value_ = nullptr, bool editable_ = false, bool secret_ = false)
             : label(label_), key(key_), value(value_), editable(editable_), secret(secret_) {}
@@ -42,7 +73,7 @@ class DeviceView {
     struct Snapshot {
         const char *title = "Device";
         const Row *rows = nullptr;               // Current page only, retained through feed/render.
-        uint8_t rowCount = 0;                    // At most 16 rows; the selected window scrolls.
+        uint8_t rowCount = 0;                    // Bounded by PS_DEVICE_VIEW_MAX_ROWS.
         const uint8_t *cellStates = nullptr;     // Exactly 80: 0 white, 1 red, 2 off.
         uint16_t pixelCount = 0, usedPixels = 0; // Wire capacity and configured prefix.
         const uint8_t *groupCounts = nullptr;
@@ -126,6 +157,10 @@ class DeviceView {
             dirty_ = full_ = true;
         }
     }
+    void setTheme(Theme theme) { if (theme <= OneDark && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
+    Theme theme() const { return theme_; }
+    void setTrueColor(bool enabled) { if (trueColor_!=enabled) {trueColor_=enabled;dirty_=full_=true;} }
+    bool trueColor() const { return trueColor_; }
     void feedback(const char *text) {
         setNotice(text);
     }
@@ -174,22 +209,26 @@ class DeviceView {
                 return false;
             }
             if (ch >= '0' && ch <= '9')
-                attribute_ = attribute_ ? 255 : ch;
+                attribute_ = attribute_ > 24 ? 255 : uint8_t(attribute_ * 10 + ch - '0');
             if (ch >= 0x40 && ch <= 0x7e) {
                 const uint8_t attribute = attribute_;
                 escape_ = escapeBytes_ = attribute_ = 0;
                 if (snapshot.lines < 16 || snapshot.columns < 40)
                     return false;
+                if (PS_DEVICE_VIEW_DIALOGS && PS_DEVICE_VIEW_TABLE && ch == 'Q')
+                    return startDialog(snapshot, action);
                 if (ch == '~') {
-                    if (attribute == '1' || attribute == '7')
+                    if (PS_DEVICE_VIEW_DIALOGS && PS_DEVICE_VIEW_TABLE && attribute == 12)
+                        return startDialog(snapshot,action);
+                    if (attribute == 1 || attribute == 7)
                         ch = 'H';
-                    else if (attribute == '4' || attribute == '8')
+                    else if (attribute == 4 || attribute == 8)
                         ch = 'F';
-                    else if (attribute == '5')
+                    else if (attribute == 5)
                         ch = 'P';
-                    else if (attribute == '6')
+                    else if (attribute == 6)
                         ch = 'N';
-                    else if (attribute == '3' && editing_)
+                    else if (attribute == 3 && editing_)
                         return edit(4, snapshot, action);
                     else
                         return false;
@@ -225,6 +264,8 @@ class DeviceView {
             return false;
         if (editing_)
             return edit(ch, snapshot, action);
+        if (PS_DEVICE_VIEW_WIDGETS && !grid_ && (ch == ' ' || ch == '+' || ch == '-'))
+            return adjust(ch, snapshot, action);
         if (ch == '\t') {
             nextPage(snapshot);
             return false;
@@ -297,7 +338,7 @@ class DeviceView {
                 return false;
             }
             const Row *row = currentRow(snapshot);
-            if (row && row->editable && keySafe(row->key)) {
+            if (row && row->editable && !row->pending && keySafe(row->key)) {
                 if (!row->secret && !plain(row->value, 384)) {
                     setNotice("Value is not editable ASCII");
                     return false;
@@ -305,11 +346,13 @@ class DeviceView {
                 copy(editKey_, sizeof(editKey_), row->key);
                 copy(editLabel_, sizeof(editLabel_), row->label);
                 secret_ = row->secret;
+                observed_ = rowHash(*row);
                 copy(draft_, sizeof(draft_), secret_ ? "" : row->value);
                 cursor_ = ps_text_length(draft_);
                 editing_ = true;
                 draftChanged_ = false;
                 dirty_ = full_ = true;
+                notice_[0] = 0;
             } else
                 setNotice("Read only");
         }
@@ -333,10 +376,13 @@ class DeviceView {
         if (!dirty_ && !force)
             return false;
         dirty_ = false;
+        if (force) full_=true;
         if (editing_ && ansi_ && columns_ >= 40 && lines_ >= 16 && !full_ && !force) {
             editLine(write);
             return true;
         }
+        if (PS_DEVICE_VIEW_TABLE)
+            return renderTable(snapshot, write);
         Writer<Write> out(write, ansi_);
         if (ansi_)
             out.raw(full_ ? "\x1b[H\x1b[2J\x1b[1;31m" : "\x1b[H\x1b[1;31m");
@@ -455,79 +501,7 @@ class DeviceView {
             if (ansi_)
                 out.raw("\x1b[0m");
             out.raw("\r\n");
-            if (page_ == Led) {
-                const uint8_t startLine = snapshot.lines < 24 ? ((cell_ - 1) / 10 < 4 ? 0 : 4) : 0;
-                const uint8_t endLine = snapshot.lines < 24 ? startLine + 4 : 8;
-                for (uint8_t line = startLine; line < endLine; ++line) {
-                    for (uint8_t col = 0; col < 10; ++col) {
-                        const uint8_t id = line * 10 + col + 1;
-                        const bool picked = id == cell_;
-                        if (ansi_) {
-                            const uint8_t state =
-                                snapshot.cellStates ? snapshot.cellStates[id - 1] : 255;
-                            out.raw(state == 0 ? "\x1b[37m" : state == 1 ? "\x1b[31m" : "\x1b[90m");
-                            if (picked && grid_)
-                                out.raw("\x1b[7m");
-                        }
-                        char number[6];
-                        ps_terminal_format(number, sizeof(number), picked ? "[%02u]" : " %02u ",
-                                           id);
-                        out.raw(number);
-                        if (ansi_)
-                            out.raw("\x1b[0m");
-                    }
-                    out.raw("\r\n");
-                }
-                if (ansi_) {
-                    out.raw("\x1b[90m");
-                }
-                out.raw(snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 \xe2\x86\x90/\xe2\x86\x92 "
-                                           "move  w white  r red  o off\r\n"
-                                         : "Up/Down Left/Right  w white r red o off\r\n");
-                if (ansi_) {
-                    out.raw("\x1b[0m");
-                }
-            } else if (page_ == Game) {
-                out.raw("\r\n");
-                for (uint8_t id = 1; id <= 9; ++id) {
-                    const bool enabled = snapshot.enabledKeys & (1U << (id - 1));
-                    if (ansi_)
-                        out.raw(!enabled                ? "\x1b[90m"
-                                : snapshot.winner == id ? "\x1b[1;35m"
-                                : snapshot.winner       ? "\x1b[31m"
-                                                        : "\x1b[37m");
-                    char box[8];
-                    ps_terminal_format(box, sizeof(box), "[%u]%s", id, id == 9 ? "\r\n" : " ");
-                    out.raw(box);
-                    if (ansi_)
-                        out.raw("\x1b[0m");
-                }
-                char winner[64];
-                ps_terminal_format(winner, sizeof(winner), "Winner %u  %s\r\n", snapshot.winner,
-                                   snapshot.gameReady ? "Ready" : "AVR unavailable");
-                out.raw(winner);
-                out.raw("1-9 press box | r reset to white\r\n");
-            } else if (page_ == Pixel) {
-                syncPixel(snapshot);
-                const uint8_t count = group_ ? snapshot.groupCounts[groupAt(snapshot, pixel_)] : 1;
-                char line[112];
-                ps_terminal_format(line, sizeof(line),
-                                   width < 70 ? "Pixels %u..%u / %u (%u)\r\n"
-                                              : "Physical pixel %u..%u / %u (%u capacity)\r\n",
-                                   pixel_ + 1, pixel_ + count, snapshot.usedPixels,
-                                   snapshot.pixelCount);
-                out.raw(line);
-                out.raw(group_ ? "Group  " : "Single pixel  ");
-                out.raw(color());
-                out.raw("\r\n");
-                if (ansi_)
-                    out.raw("\x1b[90m");
-                out.raw(snapshot.unicode
-                            ? "\xe2\x86\x90/\xe2\x86\x92 +/- step  g group  w/r/o color\r\n"
-                            : "Left/Right +/- step  g group  w/r/o color\r\n");
-                if (ansi_)
-                    out.raw("\x1b[0m");
-            }
+            renderDiagnostics(out,snapshot,unsigned(width));
         }
         if (ansi_)
             out.raw("\x1b[90m");
@@ -584,12 +558,12 @@ class DeviceView {
             }
         }
         void safe(const char *text, size_t width) {
-            char clean[129];
+            char clean[241];
             terminalText(clean, width + 1 < sizeof(clean) ? width + 1 : sizeof(clean), text);
             raw(clean);
         }
         void field(const char *text, size_t width) {
-            char clean[129];
+            char clean[241];
             const size_t n =
                 terminalText(clean, width + 1 < sizeof(clean) ? width + 1 : sizeof(clean), text);
             raw(clean);
@@ -599,7 +573,7 @@ class DeviceView {
 
       private:
         Write write_;
-        size_t remaining_ = 4096;
+        size_t remaining_ = PS_DEVICE_VIEW_TABLE ? PS_DEVICE_VIEW_FRAME_BYTES : 4096;
         bool ansi_;
     };
     static void scrub(char *p, size_t n) {
@@ -641,7 +615,7 @@ class DeviceView {
         return i < 32;
     }
     static uint8_t rowCount(const Snapshot &s) {
-        return s.rows ? (s.rowCount > 16 ? 16 : s.rowCount) : 0;
+        return s.rows ? (s.rowCount > PS_DEVICE_VIEW_MAX_ROWS ? PS_DEVICE_VIEW_MAX_ROWS : s.rowCount) : 0;
     }
     const Row *currentRow(const Snapshot &s) const {
         return selected_ < rowCount(s) ? s.rows + selected_ : nullptr;
@@ -683,6 +657,7 @@ class DeviceView {
         scrub(editLabel_, sizeof(editLabel_));
         cursor_ = 0;
         editing_ = secret_ = draftChanged_ = false;
+        dialog_ = false;
     }
     void setNotice(const char *text) {
         terminalText(notice_, sizeof(notice_), text);
@@ -798,6 +773,9 @@ class DeviceView {
         }
         const uint8_t count = rowCount(s);
         if (key == 'C' || key == 'D') {
+            const Row *row=currentRow(s);
+            if(PS_DEVICE_VIEW_WIDGETS&&row&&(row->kind==Level||row->kind==Choice))
+                return adjust(key=='C'?'+':'-',s,a);
             nextPage(s, key == 'C' ? 1 : -1);
             return false;
         }
@@ -821,7 +799,7 @@ class DeviceView {
             crPending_ = ch == '\r';
             const Row *row = currentRow(s);
             if ((page_ == Led && !s.canLeds) || (page_ == Pixel && !pixels(s)) ||
-                (page_ == Game && !s.canGame) || !row || !row->editable || !keySafe(row->key) ||
+                (page_ == Game && !s.canGame) || !row || !row->editable || row->pending || !keySafe(row->key) ||
                 !ps_text_equal(row->key, editKey_) || row->secret != secret_) {
                 clearDraft();
                 setNotice("Field changed; edit cancelled");
@@ -833,6 +811,8 @@ class DeviceView {
                 dirty_ = full_ = true;
                 return false;
             }
+            if (observed_ != rowHash(*row)) { setNotice("State changed; reopen editor"); full_=true; return false; }
+            if (!validValue(*row, draft_)) { setNotice("Invalid value or outside range"); full_=true; return false; }
             action.type = Action::Set;
             copy(action.key, sizeof(action.key), editKey_);
             copy(action.value, sizeof(action.value), draft_);
@@ -888,6 +868,7 @@ class DeviceView {
         return false;
     }
     size_t editCapacity() const {
+        if (PS_DEVICE_VIEW_TABLE) return editWidth_;
         const size_t width = columns_ < 40 ? 40 : columns_ > 100 ? 100 : columns_;
         return width - (width < 60 ? 12 : 22) - 9;
     }
@@ -896,14 +877,14 @@ class DeviceView {
     }
     template <typename Write> void editValue(Writer<Write> &out, size_t capacity) const {
         const size_t length = ps_text_length(draft_), start = editStart(capacity);
-        char visible[101]{};
+        char visible[241]{};
         for (size_t i = 0; i < capacity && start + i < length; ++i)
             visible[i] = secret_ ? '*' : draft_[start + i];
         if (ansi_)
-            out.raw("\x1b[7m");
+            out.raw(PS_DEVICE_VIEW_TABLE ? ps_style_surface(theme_,trueColor_,1) : "\x1b[7m");
         out.field(visible, capacity);
         if (ansi_)
-            out.raw("\x1b[0m");
+            out.raw(PS_DEVICE_VIEW_TABLE ? ps_style_base(theme_,trueColor_) : "\x1b[0m");
     }
     template <typename Write> void editText(Writer<Write> &out) const {
         char label[19];
@@ -927,6 +908,7 @@ class DeviceView {
         }
     }
     unsigned editorRow() const {
+        if (PS_DEVICE_VIEW_TABLE) return editRow_;
         if (PS_DEVICE_VIEW_INLINE_EDIT) {
             const unsigned visible = page_ == Led ? (lines_ < 24 ? 1 : 4)
                                       : lines_ < 24 ? 4 : 8;
@@ -936,6 +918,13 @@ class DeviceView {
     }
     template <typename Write> void editLine(Write write) const {
         Writer<Write> out(write, ansi_);
+        if (PS_DEVICE_VIEW_TABLE) {
+            char position[24];
+            ps_terminal_format(position,sizeof(position),"\x1b[%u;%uH",editRow_,editColumn_);
+            out.raw(position);editValue(out,editWidth_);
+            ps_terminal_format(position,sizeof(position),"\x1b[%u;%uH",editRow_,editColumn_+unsigned(cursor_-editStart(editWidth_)));
+            out.raw(position);out.raw("\x1b[?25h");return;
+        }
         if (PS_DEVICE_VIEW_INLINE_EDIT) {
             const unsigned column = (columns_ < 60 ? 12 : 22) + 7;
             char position[24];
@@ -966,6 +955,8 @@ class DeviceView {
             }
         };
         add(s.title);
+        value ^= (s.terminalSettings?1U:0U)|(s.cloudSettings?2U:0U)|(s.notificationSettings?4U:0U)|(s.clockSettings?8U:0U);
+        value *= 16777619U;
         value ^= s.canLeds ? 1 : 0;
         value ^= s.canPixels ? 2 : 0;
         value ^= s.pixelCount;
@@ -992,9 +983,15 @@ class DeviceView {
         for (uint8_t i = 0; i < rowCount(s); ++i) {
             add(s.rows[i].label);
             add(s.rows[i].key);
+            add(s.rows[i].category);
             if (!s.rows[i].secret)
                 add(s.rows[i].value);
             value ^= (s.rows[i].editable ? 4 : 0) | (s.rows[i].secret ? 8 : 0);
+            value ^= (unsigned(s.rows[i].kind)<<8)|(s.rows[i].pending?16:0);
+            value ^= s.rows[i].meter?32:0;
+            value *= 16777619U;
+            value ^= s.rows[i].minimum;value *= 16777619U;
+            value ^= s.rows[i].maximum;value *= 16777619U;
         }
         if (s.canLeds && s.cellStates)
             for (uint8_t i = 0; i < 80; ++i) {
@@ -1004,6 +1001,15 @@ class DeviceView {
         return value;
     }
     Page page_ = Device;
+#include "portable_device_table.hpp"
+    Theme theme_ = Violet;
+    bool trueColor_ = true, dialog_ = false;
+    unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;
+    uint32_t observed_ = 0;
+    uint32_t painted_[PS_DEVICE_VIEW_TABLE ? PS_DEVICE_VIEW_MAX_ROWS : 1]{};
+    unsigned paintedSelection_ = 255;
+    unsigned paintedRows_ = 0;
+    bool paintedGrid_ = false;
     uint8_t selected_ = 0, cell_ = 1, pixelColor_ = 1;
     uint16_t pixel_ = 0, columns_ = 80, lines_ = 24;
     size_t cursor_ = 0;

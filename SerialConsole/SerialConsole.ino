@@ -23,11 +23,7 @@
 #define PS_CONSOLE_LED_ACTIVE_LOW 0
 #endif
 #ifndef PS_CONSOLE_ENABLE_DEVICE_VIEW
-#if defined(ARDUINO_ARCH_AVR)
-#define PS_CONSOLE_ENABLE_DEVICE_VIEW 0
-#else
 #define PS_CONSOLE_ENABLE_DEVICE_VIEW 1
-#endif
 #endif
 #include "src/portable_console.h"
 #if PS_CONSOLE_ENABLE_DEVICE_VIEW
@@ -52,7 +48,7 @@ static void led_set(void *, int on) {
 #endif
 }
 /* Add commands here; callbacks receive decoded arguments and caller state. */
-static void version(portable_console *s, unsigned, char *const *) { portable_console_put(s, "Console 2.2\r\n"); }
+static void version(portable_console *s, unsigned, char *const *) { portable_console_put(s, "Console 2.3\r\n"); }
 static const portable_console_command commands[] = {
     {"version", version},
 #if PS_CONSOLE_ENABLE_DEVICE_VIEW

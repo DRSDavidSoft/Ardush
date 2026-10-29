@@ -1,6 +1,7 @@
 #ifndef PORTABLE_EDITOR_H
 #define PORTABLE_EDITOR_H
 #include "portable_terminal.h"
+#include "portable_style.h"
 /* Bounded event editor profile; source lineage is in the donor inventory.
  * No command execution, allocation or application state. Hidden by default.
  * Compile separately from the full session when a firmware already owns its
@@ -18,7 +19,7 @@
 #define PS_EDITOR_SUGGEST_BYTES 80
 #endif
 #ifndef PS_EDITOR_PROMPT_STYLE
-#define PS_EDITOR_PROMPT_STYLE "\x1b[1;32m"
+#define PS_EDITOR_PROMPT_STYLE "\x1b[1;35m"
 #endif
 #if PS_EDITOR_PROMPT_BYTES < 6 || PS_EDITOR_SUGGEST_BYTES < 2
 #error "Prompt needs >=6 bytes and suggestion storage >=2"
@@ -40,6 +41,7 @@ typedef struct {
     char draft[PS_EDITOR_CAPACITY + 1], prompt[PS_EDITOR_PROMPT_BYTES], suggestion[PS_EDITOR_SUGGEST_BYTES];
     size_t next, count, offset, draft_cursor, cursor;
     unsigned char escape, attribute, escape_bytes, echo, cr_pending, overflow, ansi, upper;
+    unsigned char theme, true_color;
 } ps_editor;
 static inline void ps_term_emit(ps_terminal_write write, void *ctx, const char *text) {
     write(ctx, (const unsigned char *)text, ps_text_length(text));
@@ -64,6 +66,8 @@ static inline void ps_term_left(ps_terminal_write write, void *ctx, size_t n, in
 static inline void ps_editor_init(ps_editor *s) {
     ps_secure_clear(s, sizeof(*s));
     s->ansi = 1;
+    s->theme = 255;
+    s->true_color = 1;
     ps_bytes_copy(s->prompt, "shell", 6);
 }
 static inline void ps_editor_clear(ps_editor *s) {
@@ -87,7 +91,7 @@ static inline void ps_editor_prompt(ps_editor *s, ps_terminal_write write, void 
     if (!s->echo)
         return;
     if (s->ansi)
-        ps_term_emit(write, ctx, PS_EDITOR_PROMPT_STYLE);
+        ps_term_emit(write, ctx, s->theme <= 3 ? ps_style_ink(s->theme, s->true_color, 0, 1) : PS_EDITOR_PROMPT_STYLE);
     ps_term_emit(write, ctx, s->prompt);
     ps_term_emit(write, ctx, "> ");
     if (s->ansi)

@@ -114,6 +114,10 @@ class LineEditor {
     void setUpper(bool enabled) {
         state_.upper = enabled;
     }
+    void setTheme(unsigned theme, bool trueColor = true) {
+        state_.theme = theme <= 3 ? static_cast<unsigned char>(theme) : 255;
+        state_.true_color = trueColor;
+    }
     void setPrompt(const char *label, bool ansi = true) {
         terminalText(state_.prompt, sizeof(state_.prompt), label, 128);
         state_.ansi = ansi;

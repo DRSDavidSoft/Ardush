@@ -20,7 +20,9 @@ int main() {
 #endif
     out.clear(); feed(&s, "\r\025on");
     assert(!led && writes == 0 && portable_console_ui.view.editing());
-#if PS_DEVICE_VIEW_INLINE_EDIT
+#if PS_DEVICE_VIEW_TABLE
+    assert(out.find("Edit LED:") == std::string::npos);
+#elif PS_DEVICE_VIEW_INLINE_EDIT
     assert(out.find("\033[4;29H") != std::string::npos && out.find("Edit LED:") == std::string::npos);
 #else
     assert(out.find("Edit LED:") != std::string::npos);
@@ -38,7 +40,9 @@ int main() {
     assert(out.find('\033') == std::string::npos);
     out.clear(); feed(&s, "\r\025off");
     assert(out.find('\033') == std::string::npos);
-#if PS_DEVICE_VIEW_INLINE_EDIT
+#if PS_DEVICE_VIEW_TABLE
+    assert(out.find("Edit LED:") == std::string::npos);
+#elif PS_DEVICE_VIEW_INLINE_EDIT
     assert(out.find("Edit LED:") == std::string::npos);
 #endif
     assert(out.find("off") != std::string::npos && led && writes == 1);

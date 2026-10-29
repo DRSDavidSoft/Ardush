@@ -25,7 +25,7 @@ This is a byte-stream replay fixture, not a physical board screenshot. Other
 checked frames: [inline draft](previews/edit.png), [transport](previews/transport.png),
 [terminal](previews/terminal.png). Red rounded borders, magenta selection, two
 columns, contextual footer, tabs and an alternate screen come from the shared
-renderer. The Uno profile omits the view to preserve its 2 KB SRAM budget.
+renderer. The documented Uno command explicitly omits the view for its 2 KB SRAM budget. Architecture alone never removes UI features.
 
 ## Build and connect
 
@@ -34,7 +34,7 @@ compile only. No upload, board reset or live connection occurs automatically.
 
 ```text
 arduino-cli core install arduino:avr@1.8.8
-arduino-cli compile --fqbn arduino:avr:uno SerialConsole
+arduino-cli compile --fqbn arduino:avr:uno --build-property compiler.cpp.extra_flags=-DPS_CONSOLE_ENABLE_DEVICE_VIEW=0 SerialConsole
 arduino-cli compile --fqbn arduino:avr:mega:cpu=atmega2560 --build-property compiler.cpp.extra_flags=-DPS_CONSOLE_ENABLE_DEVICE_VIEW=1 SerialConsole
 arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
 arduino-cli core install STMicroelectronics:stm32@3.0.0 --additional-urls https://raw.githubusercontent.com/stm32duino/BoardManagerFiles/main/package_stmicroelectronics_index.json
@@ -54,7 +54,7 @@ chosen Arduino serial implementation.
 | `PS_CONSOLE_LED_PIN` | `LED_BUILTIN`, or `-1` to disable hardware access |
 | `PS_CONSOLE_LED_ACTIVE_LOW` | `0`; set `1` for an active-low LED such as the configured PC13 fixture |
 | `PS_CONSOLE_INTERACTIVE` | `1`; `0` selects plain, prompt-free command streams |
-| `PS_CONSOLE_ENABLE_DEVICE_VIEW` | `0` on AVR, `1` elsewhere; Mega can explicitly enable it |
+| `PS_CONSOLE_ENABLE_DEVICE_VIEW` | `1` everywhere; the documented Uno build explicitly selects `0` |
 | `PS_CONSOLE_ASCII_ONLY` | Define to suppress Unicode in the view; `plain` also disables ANSI/Unicode at runtime |
 | `PS_CONSOLE_RAW_ECHO` | `1` preserves exact old echo spacing/quotes; `0` prints parsed arguments |
 | `PS_CONSOLE_LEGACY_EXIT_BYTES` | `0`; `1` also emits the original Ctrl-C/Ctrl-Z/NUL sequence on interactive exit |
@@ -131,6 +131,6 @@ cmake -DPORTABLE_SHELL_SOURCE=/path/to/portable-shell -DPORTABLE_SHELL_REVISION=
 cmake -P tools/verify-portable-shell.cmake
 ```
 
-The six vendored headers and MIT license are byte-identical snapshots recorded
+The eight vendored headers and MIT license are byte-identical snapshots recorded
 in `portable-shell.lock`. CI checks their hashes. Edit the canonical source and
 repin; do not fork fixes inside this directory.
