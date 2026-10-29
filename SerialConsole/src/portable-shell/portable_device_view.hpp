@@ -26,6 +26,9 @@
 #ifndef PS_DEVICE_VIEW_FRAME_BYTES
 #define PS_DEVICE_VIEW_FRAME_BYTES 32768
 #endif
+#if PS_DEVICE_VIEW_TABLE && PS_DEVICE_VIEW_FRAME_BYTES < 16384
+#error Rich tables require a frame budget of at least 16384 bytes
+#endif
 #if PS_DEVICE_VIEW_MAX_ROWS < 1 || PS_DEVICE_VIEW_MAX_ROWS > 255
 #error PS_DEVICE_VIEW_MAX_ROWS must be in 1..255
 #endif
@@ -998,7 +1001,7 @@ class DeviceView {
         return value;
     }
     Page page_ = Device;
-#include "portable_device_table.inc"
+#include "portable_device_table.hpp"
     Theme theme_ = Violet;
     bool trueColor_ = true, dialog_ = false;
     unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;
