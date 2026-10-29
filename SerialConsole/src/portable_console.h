@@ -179,12 +179,15 @@ static inline void portable_console_feed(portable_console *s, unsigned char ch) 
     int result; unsigned i;
     if (s->mode == PS_CONSOLE_CLOSED || s->mode == PS_CONSOLE_VIEW) return;
     if (s->skip_lf && (ch == '\n' || !ch)) { s->skip_lf = 0; return; }
-    s->skip_lf = ch == '\r';
     if (s->mode == PS_CONSOLE_KEYS) {
+        /* Only consume the command's pending CRLF above. Diagnostic bytes
+         * are raw: a subsequent CR must not suppress LF or NUL. */
+        s->skip_lf = 0;
         if (ch == 3) { s->mode = PS_CONSOLE_PROMPT; portable_console_prompt(s); }
         else { portable_console_number(s, ch); portable_console_put(s, "\r\n"); }
         return;
     }
+    s->skip_lf = ch == '\r';
     if (s->mode == PS_CONSOLE_PROBE) {
         result = ps_probe_feed(&s->probe, ch);
         if (result == PS_PROBE_WAIT) return;
