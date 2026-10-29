@@ -29,6 +29,9 @@ typedef char portable_console_prompt_fits[
 #ifndef PS_CONSOLE_RAW_ECHO
 #define PS_CONSOLE_RAW_ECHO 1
 #endif
+#ifndef PS_CONSOLE_SUGGESTIONS
+#define PS_CONSOLE_SUGGESTIONS 1
+#endif
 #ifndef PS_CONSOLE_LEGACY_EXIT_BYTES
 #define PS_CONSOLE_LEGACY_EXIT_BYTES 0
 #endif
@@ -80,7 +83,7 @@ static inline void portable_console_close(portable_console *s) {
 static inline void portable_console_builtin(portable_console *, unsigned, char *const *);
 static const char *const portable_console_names[] = {
     "clear", "upper", "noupper", "echo", "led", "test", "getcur", "exit", "keycodes",
-    "help", "status", "ansi", "plain", "history-clear"
+    "help", "status", "ansi", "plain", "history-clear", "bell"
 };
 #define PS_CONSOLE_BUILTINS (sizeof portable_console_names / sizeof portable_console_names[0])
 static inline const char *portable_console_candidate(void *ctx, size_t i) {
@@ -102,8 +105,16 @@ static inline void portable_console_builtin(portable_console *s, unsigned argc, 
     else if (portable_console_equal(cmd, "ansi")) s->editor.ansi = s->interactive;
     else if (portable_console_equal(cmd, "plain")) s->editor.ansi = 0;
     else if (portable_console_equal(cmd, "history-clear")) ps_editor_clear_history(&s->editor);
+    else if (portable_console_equal(cmd, "bell")) ps_editor_bell(&s->editor, portable_console_write, s);
     else if (portable_console_equal(cmd, "help")) {
+        const int compact = argc == 2 && portable_console_equal(argv[1], "--compact");
+        if (argc > 2 || (argc == 2 && !compact && !portable_console_equal(argv[1], "--headings"))) {
+            s->status = 2; portable_console_put(s, "help [--headings|--compact]\r\n"); return;
+        }
+        if (!compact) portable_console_put(s, "Console:\r\n");
         for (i = 0; i < PS_CONSOLE_BUILTINS + s->command_count; ++i) {
+            if (!compact && i == PS_CONSOLE_BUILTINS) portable_console_put(s, "\r\nApplication:\r\n");
+            if (!compact) portable_console_put(s, "  ");
             portable_console_put(s, portable_console_candidate(s, i)); portable_console_put(s, "\r\n");
         }
     } else if (portable_console_equal(cmd, "status")) {
@@ -174,6 +185,16 @@ static inline void portable_console_editor_feed(portable_console *s, unsigned ch
     else if (event == PS_EDIT_CLOSE) portable_console_close(s);
     else if (event == PS_EDIT_COMPLETE)
         ps_editor_complete(&s->editor, 0, PS_CONSOLE_BUILTINS + s->command_count, portable_console_candidate, s, portable_console_write, s);
+#if PS_CONSOLE_SUGGESTIONS
+    else if (event == PS_EDIT_NONE && s->mode == PS_CONSOLE_PROMPT) {
+        size_t i = 0;
+        while (s->editor.command[i] && s->editor.command[i] != ' ' && s->editor.command[i] != '\t') ++i;
+        /* Command candidates at token zero; admitted history can complete the
+         * full raw line. Never suggest application state or credential values. */
+        ps_editor_suggest(&s->editor, 0, s->editor.command[i] ? 0 : PS_CONSOLE_BUILTINS + s->command_count,
+                          portable_console_candidate, s, portable_console_write, s);
+    }
+#endif
 }
 static inline void portable_console_feed(portable_console *s, unsigned char ch) {
     int result; unsigned i;

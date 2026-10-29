@@ -73,7 +73,15 @@ parsed echo builds are regression-tested. To reproduce the original uncolored
 `PS_EDITOR_PROMPT_STYLE` as empty string literals. The usual terminal reset is
 still emitted. No donor source/history or license was removed during this recheck.
 
-`help` lists the active registry. Original commands: `clear`, `upper`, `noupper`,
+`help` lists the active registry under Console/Application headings;
+`help --compact` retains the flat list. `bell` emits BEL on interactive transports.
+Ghost suggestions are enabled by default: admitted history first, then command
+names, accepted by → or End. `PS_CONSOLE_SUGGESTIONS=0` retains explicit Tab with
+no ghost preview. Batch streams and hidden input do not emit previews or bells.
+Applications can call `ps_editor_refresh_prompt` after changing their real
+identity; this preserves the draft and cursor. Network hostname application and
+durable saves belong to application callbacks, not a simulated shell variable.
+Original commands: `clear`, `upper`, `noupper`,
 `echo`, `led`, `test`, `getcur`, `exit`, `keycodes`. New commands: `status`, `ansi`,
 `plain`, `history-clear`, `help`, sketch `version`, and optional `view`.
 `led` toggles; `led on`/`led off` set an explicit state. `status` reports observed

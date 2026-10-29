@@ -131,6 +131,9 @@ class LineEditor {
     template <class W> void redraw(W w) {
         ps_editor_redraw(&state_, writer<W>, &w);
     }
+    template <class W> void refreshPrompt(const char *label, W w, bool ansi = true) {
+        ps_editor_refresh_prompt(&state_, label, ansi, writer<W>, &w);
+    }
     template <class W> void redrawEvent(const char *text, W w) {
         char safe[257];
         terminalText(safe, sizeof(safe), text);
