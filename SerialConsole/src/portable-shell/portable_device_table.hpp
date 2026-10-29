@@ -211,7 +211,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
         out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"] ":"  ");base(out);
         used+=unsigned(ps_text_length(pageName(i)))+3;
     }
-    if(tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u  Tab next",unsigned(page_)+1,unsigned(PageCount));
+    if(tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u",unsigned(page_)+1,unsigned(PageCount));
         const unsigned n=unsigned(ps_text_length(hint));if(used+n<w-4){ink(out,0);out.raw(hint);used+=n;}}
     out.field("",w-4-used);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     if(PS_DEVICE_VIEW_MATRIX&&page_==Led&&grid_&&s.canLeds){matrix(out,s,w);return true;}
