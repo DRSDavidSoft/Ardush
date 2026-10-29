@@ -33,6 +33,8 @@ int main(void) {
     assert(s.mode == PS_CONSOLE_PROMPT && strstr(out, "probe timeout"));
     feed(&s, "getcur\r\033[99999;1R"); assert(!s.editor.command[0]);
     clear_output(); feed(&s, "keycodes\r\nAz\003"); assert(strstr(out, "65\r\n122\r\n"));
+    clear_output(); feed(&s, "keycodes\r\nA\r\n"); portable_console_feed(&s, 0);
+    assert(strstr(out, "65\r\n13\r\n10\r\n0\r\n")); feed(&s, "\003");
     assert(s.mode == PS_CONSOLE_PROMPT); feed(&s, "upper\r"); assert(s.editor.upper);
     clear_output(); feed(&s, "clear\rtest\r"); assert(strstr(out, "\033[H\033[2J") && strchr(out, 5));
     feed(&s, "help\rstatus\rhistory-clear\r"); assert(!s.editor.count && strstr(out, "custom\r\n"));

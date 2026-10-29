@@ -64,6 +64,15 @@ chosen Arduino serial implementation.
 
 ## Commands and reuse
 
+Preservation recheck (2026-10-29): the original nine command names, default
+uppercase display and 9600 baud adapter remain available. `keycodes` now reports
+every diagnostic byte, including CR, LF and NUL; only the pending line ending
+of the command itself is consumed. Ctrl-C returns to the prompt. Both raw and
+parsed echo builds are regression-tested. To reproduce the original uncolored
+`> ` prompt while retaining ANSI editing, define `PS_CONSOLE_PROMPT_LABEL` and
+`PS_EDITOR_PROMPT_STYLE` as empty string literals. The usual terminal reset is
+still emitted. No donor source/history or license was removed during this recheck.
+
 `help` lists the active registry. Original commands: `clear`, `upper`, `noupper`,
 `echo`, `led`, `test`, `getcur`, `exit`, `keycodes`. New commands: `status`, `ansi`,
 `plain`, `history-clear`, `help`, sketch `version`, and optional `view`.
