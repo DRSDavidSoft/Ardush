@@ -59,6 +59,24 @@ int main(void) {
 #endif
     { const portable_console_command override[] = {{"echo", custom}};
       portable_console_init(&s, port, override, 1, 0); feed(&s, "echo 'a b' \"\" c\\ d\n"); assert(calls == 2); }
+    clear_output();portable_console_init(&s, port, commands, 1, 1);s.editor.upper=0;
+    clear_output();feed(&s,"stat");
+#if PS_CONSOLE_SUGGESTIONS
+    assert(strstr(out,"\033[90mus") && !strcmp(s.editor.suggestion,"us"));
+    feed(&s,"\033[F");assert(!strcmp(s.editor.command,"status "));
+#endif
+    feed(&s,"\003echo remembered tail\r");clear_output();feed(&s,"echo rem");
+#if PS_CONSOLE_SUGGESTIONS
+    assert(!strcmp(s.editor.suggestion,"embered tail"));
+    feed(&s,"\033[C");assert(!strcmp(s.editor.command,"echo remembered tail"));
+#endif
+    feed(&s,"\003");clear_output();feed(&s,"bell\r");assert(memchr(out,7,used));
+    clear_output();feed(&s,"help\r");assert(strstr(out,"Console:")&&strstr(out,"Application:"));
+    clear_output();feed(&s,"help --compact\r");assert(!strstr(out,"Console:")&&strstr(out,"custom\r\n"));
+    feed(&s,"echo draft\033[D");size_t cursor=s.editor.cursor;
+    clear_output();ps_editor_refresh_prompt(&s.editor,"new",1,capture,0);
+    assert(strstr(out,"new")&&!strcmp(s.editor.command,"echo draft")&&s.editor.cursor==cursor);
+    portable_console_init(&s,port,commands,1,0);clear_output();feed(&s,"bell\n");assert(!used);
     printf("SerialConsole command/editor/probe/batch checks passed; session=%u bytes\n", (unsigned)sizeof s);
     return 0;
 }
