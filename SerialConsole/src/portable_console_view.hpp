@@ -6,7 +6,7 @@
 #endif
 #include "portable-shell/portable_device_view.hpp"
 /* Optional application mapping; the renderer is canonical PortableShell code.
- * Default Uno excludes this view. No hardware writes during render/navigation.
+ * The documented Uno build explicitly excludes this view. No hardware writes during render/navigation.
  * One convenience instance per translation unit; applications can own others. */
 struct ConsoleView {
     PortableShell::DeviceView view;

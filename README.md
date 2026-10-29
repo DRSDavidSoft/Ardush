@@ -131,6 +131,6 @@ cmake -DPORTABLE_SHELL_SOURCE=/path/to/portable-shell -DPORTABLE_SHELL_REVISION=
 cmake -P tools/verify-portable-shell.cmake
 ```
 
-The six vendored headers and MIT license are byte-identical snapshots recorded
+The eight vendored headers and MIT license are byte-identical snapshots recorded
 in `portable-shell.lock`. CI checks their hashes. Edit the canonical source and
 repin; do not fork fixes inside this directory.
