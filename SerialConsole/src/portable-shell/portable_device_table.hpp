@@ -16,6 +16,12 @@ static void numberText(char *out,uint32_t n) {
     do {reverse[count++]=char('0'+n%10U);n/=10U;}while(n);
     unsigned at=0;while(count)out[at++]=reverse[--count];out[at]=0;
 }
+static unsigned levelPercent(uint32_t offset,uint32_t span){
+    if(!span)return 0;
+    unsigned result=0;const uint32_t whole=span/100,remainder=span%100;
+    while(result<100&&offset>=(result+1)*whole+((result+1)*remainder+99)/100)++result;
+    return result;
+}
 static uint32_t rowHash(const Row &r) {
     uint32_t h=2166136261U;
     // Secret values are deliberately absent; providers must revalidate writes.
@@ -56,7 +62,7 @@ bool startDialog(const Snapshot &s,Action &a) {
     if(editing_){dialog_=true;full_=dirty_=true;}return false;
 }
 static const char *pageName(unsigned p) {
-    static const char *const names[]={"Device","Network","LEDs","Pixels","Game","Terminal","Cloud","Notifications","Clock"};
+    static const char *const names[]={"Device","Network","Matrix","Pixels","Game","Terminal","Cloud","Notifications","Clock"};
     return p<PageCount?names[p]:"";
 }
 static bool pageAvailable(unsigned p,const Snapshot &s) {
@@ -85,7 +91,9 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
     if(r.pending){ink(out,2);out.field("Pending readback",width);return;}
     if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Toggle){
         const int on=toggle(r.value);ink(out,on<0?0:on?5:3);
-        out.field(on<0?"Unknown":on?"[x] On":"[ ] Off",width);return;
+        if(on<0){out.field("Unknown",width);return;}
+        out.raw(s.unicode?(on?"\xe2\x97\x8f ":"\xe2\x97\x8b "):(on?"+ ":"- "));
+        out.field(on?r.onLabel:r.offLabel,width-2);return;
     }
     uint32_t n;
     if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Level&&r.meter&&width>=22&&decimal(r.value,n)&&r.maximum>r.minimum&&n>=r.minimum&&n<=r.maximum){
@@ -94,9 +102,94 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
         const uint32_t quantum=span/bar+(span%bar!=0);
         const unsigned filled=n==r.maximum?bar:unsigned(offset/quantum);
         for(unsigned i=0;i<bar;++i){ink(out,i<filled?1:0);out.raw(s.unicode?(i<filled?"\xe2\x94\x81":"\xe2\x94\x80"):(i<filled?"#":"."));}
-        ink(out,1);out.raw(" ");char text[32];numberText(text,n);out.field(text,width-bar-1);return;
+        ink(out,1);out.raw(" ");char text[40];
+        const unsigned percent=levelPercent(n-r.minimum,r.maximum-r.minimum);
+        ps_terminal_format(text,sizeof(text),"%u%% (%u/%u)",percent,n,r.maximum);
+        out.field(text,width-bar-1);return;
     }
-    ink(out,r.editable?1:4);out.field(r.value,width);
+    const char *shown=r.value;
+    if(r.kind==Choice&&r.choices&&r.choiceLabels)for(unsigned i=0;i<r.choiceCount;++i)if(ps_text_equal(r.value,r.choices[i])){shown=r.choiceLabels[i];break;}
+    ink(out,r.editable?1:4);
+    if(r.unit&&*r.unit){char text[241];ps_terminal_format(text,sizeof(text),"%s %s",shown,r.unit);out.field(text,width);}
+    else out.field(shown,width);
+}
+
+// Exactly one context owns hints. Editing suppresses page/grid navigation.
+template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const {
+    base(out);ink(out,0);
+    if(editing_&&dialog_&&ansi_)return; // The modal owns its only Apply/Cancel hint.
+    if(editing_){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 cursor  Enter apply  Esc cancel":"Left/Right cursor Enter apply Esc cancel");out.raw("\r\n");return;}
+    const Row *r=currentRow(s);
+    if(grid_&&page_==Led){
+        out.raw(s.unicode?"\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 move":"Up/Down Left/Right");
+        out.raw(w>=60?"  W idle  R lost  O off":"  W/R/O state");
+    }else if(grid_&&page_==Pixel){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 test  G group  W/R/O color":"Left/Right test G group W/R/O color");}
+    else if(page_==Game&&grid_){out.raw(s.gameReady?"1-9 press  R reset":"AVR unavailable");}
+    else {out.raw(s.unicode?"\xe2\x86\x91/\xe2\x86\x93 select":"Up/Down select");
+        if(r&&r->editable&&!r->pending){
+            out.raw(PS_DEVICE_VIEW_WIDGETS&&r->kind==Toggle?"  Space toggle":PS_DEVICE_VIEW_WIDGETS&&r->kind==Choice?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 choose":"  +/- choose"):PS_DEVICE_VIEW_WIDGETS&&r->kind==Level?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 adjust":"  +/- adjust"):"  Enter edit");
+            if(w>=70&&r->kind==Level)out.raw("  Enter edit");
+            if(w>=90&&PS_DEVICE_VIEW_DIALOGS)out.raw("  F2 dialog");
+        }
+    }
+    out.raw("\r\n");
+    if(page_==Led||page_==Pixel||page_==Game)out.raw(grid_?"F settings  ":page_==Led?"F matrix  ":page_==Game?"F game  ":"F pixels  ");
+    out.raw("Tab pages  Esc close\r\n");
+}
+
+static const char *cellName(const Snapshot &s,unsigned state){
+    static const char *const names[]={"Idle","Lost","Off","Won"};
+    return state<4?(s.cellStateNames?s.cellStateNames[state]:names[state]):"Unknown";
+}
+static uint32_t cellRgb(const Snapshot &s,unsigned id){
+    static const uint32_t colors[]={0xffffff,0xff0000,0,0x00ff00};
+    const unsigned state=s.cellStates?s.cellStates[id-1]:255;
+    return s.cellColors?s.cellColors[id-1]:state<4?colors[state]:0;
+}
+template<class W> void matrix(Writer<W> &out,const Snapshot &s,unsigned w){
+    const unsigned slots=s.cellStaggered?20:10,tile=w>=slots*4+6?4:3;
+    const unsigned visibleX=(w-6)/tile<slots?(w-6)/tile:slots;
+    const unsigned n=cell_-1,selectedY=n/10,selectedX=s.cellStaggered?2*(n%10)+(n/10)%2:n%10;
+    const unsigned startX=selectedX>=visibleX?selectedX-visibleX+1:0;
+    const unsigned visibleY=s.lines>=18?8:s.lines-10,startY=selectedY>=visibleY?selectedY-visibleY+1:0;
+    rule(out,s,w,"\xe2\x94\x9c","\xe2\x94\xa4");
+    edge(out,s,"\xe2\x94\x82 ","| ");ink(out,4);
+    out.raw(s.cellStaggered?(s.unicode?"20 \xc3\x97 4 staggered":"20 x 4 staggered"):(s.unicode?"10 \xc3\x97 8 cells":"10 x 8 cells"));
+    const unsigned heading=s.cellStaggered?16:12;
+    out.field("",w-4-heading);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
+    for(unsigned y=startY;y<startY+visibleY;++y){
+        edge(out,s,"\xe2\x94\x82 ","| ");ink(out,0);char label[3]={char('A'+y),' ',0};out.raw(label);
+        for(unsigned x=startX;x<startX+visibleX;++x){
+            if(s.cellStaggered&&x%2!=y%2){out.field("",tile);continue;}
+            const unsigned id=y*10+(s.cellStaggered?x/2:x)+1;
+            const unsigned state=s.cellStates?s.cellStates[id-1]:255;
+            const uint32_t rgb=cellRgb(s,id);const bool picked=id==cell_;
+            const unsigned bright=((rgb>>16)&255)*299+((rgb>>8)&255)*587+(rgb&255)*114;
+            if(ansi_){
+                if(state>=4){ink(out,0);}
+                else if(trueColor_){char style[80];
+                    ps_terminal_format(style,sizeof(style),"\x1b[48;2;%u;%u;%um\x1b[38;2;%u;%u;%um",(rgb>>16)&255,(rgb>>8)&255,rgb&255,bright>128000?20:255,bright>128000?20:255,bright>128000?20:255);out.raw(style);}
+                else {const unsigned index=16+36*(((rgb>>16)&255)*5/255)+6*(((rgb>>8)&255)*5/255)+(rgb&255)*5/255;
+                    char style[40];ps_terminal_format(style,sizeof(style),"\x1b[48;5;%um\x1b[%um",index,bright>128000?30:97);out.raw(style);}
+                if(picked)out.raw("\x1b[1;4m");
+            }
+            char number[8];ps_terminal_format(number,sizeof(number),"%02u",id);
+            static const char *const plainState[]={"I","L","O","W"};
+            out.raw(picked?(s.unicode?"\xe2\x96\xb8":">"):state>=4?"?":!ansi_?plainState[state]:" ");out.raw(number);
+            if(tile==4)out.raw(" ");
+            base(out);
+        }
+        out.field("",w-6-visibleX*tile);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
+    }
+    rule(out,s,w,"\xe2\x95\xb0","\xe2\x95\xaf");
+    const unsigned state=s.cellStates?s.cellStates[cell_-1]:255;char status[128];
+    ps_terminal_format(status,sizeof(status),"Cell %02u  %s",cell_,cellName(s,state));ink(out,4);out.safe(status,w>=60?24:w);
+    if(w>=60){const uint32_t rgb=cellRgb(s,cell_);char hex[8]={'#',0};const char *digits="0123456789ABCDEF";
+        for(unsigned i=0;i<6;++i)hex[i+1]=digits[(rgb>>(20-4*i))&15];
+        if(state<4){out.raw("  ");out.raw(hex);}ink(out,0);out.raw("  ");
+        out.safe(*notice_?notice_:"Configured state colors",w-35);}
+    else if(*notice_){out.raw("\r\n");out.safe(notice_,w);}
+    out.raw("\r\n");footer(out,s,w);if(ansi_)out.raw("\x1b[J");
 }
 template<class Write> bool renderTable(const Snapshot &s,Write write) {
     Writer<Write> out(write,ansi_);
@@ -104,24 +197,25 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     bool paintAll=full_||!ansi_;
     if(ansi_){base(out);out.raw(full_?"\x1b[H\x1b[2J":"\x1b[H");}
     full_=false;
-    if(width<40||s.lines<16){out.raw("Resize terminal to 40 x 16\r\n");return true;}
+    if(width<40||s.lines<16){out.raw(s.unicode?"Resize terminal to 40 \xc3\x97 16\r\n":"Resize terminal to 40 x 16\r\n");return true;}
     // Leave the physical terminal's last column free to avoid delayed autowrap.
     const unsigned w=width-1;
     base(out);ink(out,7);out.raw(s.unicode?"\xe2\x95\xad\xe2\x94\x80 ":"+- ");
     ink(out,4);char title[241];const unsigned titleSize=unsigned(terminalText(title,w-8,s.title));out.raw(title);
     ink(out,7);out.raw(" ");for(unsigned i=titleSize+4;i<w-1;++i)out.raw(s.unicode?"\xe2\x94\x80":"-");out.raw(s.unicode?"\xe2\x95\xae":"+");base(out);out.raw("\r\n");
     edge(out,s,"\xe2\x94\x82 ","| ");
-    unsigned used=0,total=0;for(unsigned i=0;i<PageCount;++i)if(pageAvailable(i,s))total+=unsigned(ps_text_length(pageName(i)))+3;
+    unsigned used=0,tabTotal=0;for(unsigned i=0;i<PageCount;++i)if(pageAvailable(i,s))tabTotal+=unsigned(ps_text_length(pageName(i)))+3;
     for(unsigned i=0;i<PageCount;++i){
-        if(!pageAvailable(i,s)||(total>w-4&&i!=page_))continue;
+        if(!pageAvailable(i,s)||(tabTotal>w-4&&i!=page_))continue;
         if(i==page_&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
         out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"] ":"  ");base(out);
         used+=unsigned(ps_text_length(pageName(i)))+3;
     }
-    if(total>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u  Tab next",unsigned(page_)+1,unsigned(PageCount));
+    if(tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u",unsigned(page_)+1,unsigned(PageCount));
         const unsigned n=unsigned(ps_text_length(hint));if(used+n<w-4){ink(out,0);out.raw(hint);used+=n;}}
     out.field("",w-4-used);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
-    const bool category=w>=95;
+    if(PS_DEVICE_VIEW_MATRIX&&page_==Led&&grid_&&s.canLeds){matrix(out,s,w);return true;}
+    const bool category=PS_DEVICE_VIEW_CATEGORY_COLUMN&&w>=95;
     const unsigned groupWidth=category?16:0,labelWidth=w<59?12:w<95?24:28;
     const unsigned valueWidth=w-7-labelWidth-(category?groupWidth+3:0);
     gridRule(out,s,w,groupWidth,labelWidth,"\xe2\x94\xac","\xe2\x94\x9c","\xe2\x94\xa4");
@@ -130,26 +224,36 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     ink(out,0);out.field("Value",valueWidth);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     gridRule(out,s,w,groupWidth,labelWidth,"\xe2\x94\xbc","\xe2\x94\x9c","\xe2\x94\xa4");
     const unsigned count=rowCount(s);if(selected_>=count)selected_=count?uint8_t(count-1):0;
-    const unsigned diagnostics=page_==Led?(s.lines<24?5:9):page_==Game?4:page_==Pixel?3:0;
+    const unsigned diagnostics=page_==Led&&!PS_DEVICE_VIEW_MATRIX?(s.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
     unsigned visible=s.lines>11+diagnostics?s.lines-11-diagnostics:1;
     if(visible>PS_DEVICE_VIEW_MAX_ROWS)visible=PS_DEVICE_VIEW_MAX_ROWS;
     // Bound complete frames rather than silently dropping their final border.
     const unsigned budgetRows=(PS_DEVICE_VIEW_FRAME_BYTES > 8192 ? PS_DEVICE_VIEW_FRAME_BYTES-8192 : 1)/(w+1000U);
     if(visible>budgetRows)visible=budgetRows?budgetRows:1;
-    if(visible>(count?count:1))visible=count?count:1;
+    // PCController's logical-row/section-line separation, without heap storage.
+    uint8_t logical[PS_DEVICE_VIEW_MAX_ROWS*2];bool section[PS_DEVICE_VIEW_MAX_ROWS*2];
+    unsigned total=0,selectedLine=0;
+    for(unsigned i=0;i<count;++i){
+        if(!category&&s.rows[i].category&&*s.rows[i].category&&(i==0||!ps_text_equal(s.rows[i].category,s.rows[i-1].category))){logical[total]=uint8_t(i);section[total++]=true;}
+        if(i==selected_)selectedLine=total;
+        logical[total]=uint8_t(i);section[total++]=false;
+    }
+    if(visible>(total?total:1))visible=total?total:1;
     if(paintedRows_!=visible){paintAll=true;paintedRows_=visible;}
-    const unsigned start=selected_>=visible?selected_-visible+1:0;
+    const unsigned start=selectedLine>=visible?selectedLine-visible+1:0;
     for(unsigned i=0;i<visible;++i){
-        const unsigned at=start+i;
+        const unsigned line=start+i,at=line<total?logical[line]:count;
+        const bool group=line<total&&section[line];
         const Row *r=at<count?s.rows+at:nullptr;const bool selected=r&&at==selected_&&!grid_;
         Snapshot single;single.rows=r;single.rowCount=r?1:0;
-        const uint32_t stamp=hash(single)^at;
+        const uint32_t stamp=hash(single)^at^(group?0x80000000U:0);
         const bool selectionChanged=(selected_!=paintedSelection_)&&(at==selected_||at==paintedSelection_);
         if(!paintAll&&painted_[i]==stamp&&!selectionChanged&&paintedGrid_==grid_)continue;
         painted_[i]=stamp;
         if(ansi_){char pos[24];ps_terminal_format(pos,sizeof(pos),"\x1b[%u;1H",6+i);out.raw(pos);}
         edge(out,s,"\xe2\x94\x82 ","| ");
-        if(category)cell(r?r->category:"",groupWidth);
+        if(group){ink(out,6);out.raw(s.unicode?"\xe2\x94\x80 ":"- ");out.field(r->category,w-6);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");continue;}
+        if(category)cell(r&&(i==0||!ps_text_equal(r->category,s.rows[at-1].category))?r->category:"",groupWidth);
         if(selected&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,2));
         ink(out,selected?1:4);out.raw(selected?(s.unicode?"\xe2\x96\xb8 ":"> "):"  ");
         out.field(r?r->label:"",labelWidth-2);edge(out,s," \xe2\x94\x82 "," | ");
@@ -160,19 +264,13 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     paintedSelection_=selected_;paintedGrid_=grid_;
     if(ansi_){char pos[24];ps_terminal_format(pos,sizeof(pos),"\x1b[%u;1H",6+visible);out.raw(pos);}
     gridRule(out,s,w,groupWidth,labelWidth,"\xe2\x94\xb4","\xe2\x95\xb0","\xe2\x95\xaf");
-    if(pageAvailable(page_,s))renderDiagnostics(out,s,w);
+    if(pageAvailable(page_,s)&&!(PS_DEVICE_VIEW_MATRIX&&page_==Led))renderDiagnostics(out,s,w);
     base(out);ink(out,0);
     const Row *r=currentRow(s);
-    const char *hint=editing_?"Enter apply  Esc cancel  ^U clear":
-        grid_?(page_==Led?"f settings  w white  r red  o off":"Enter test  f settings  g group"):
-        r&&r->pending?"Waiting for readback":r&&!r->editable?"Read only":
-        PS_DEVICE_VIEW_WIDGETS&&r&&r->kind==Toggle?(PS_DEVICE_VIEW_DIALOGS?"Space toggle  Enter value  F2 dialog":"Space toggle  Enter value"):
-        PS_DEVICE_VIEW_WIDGETS&&r&&r->kind==Level?(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 adjust  Enter value":"+/- adjust  Enter value"):
-        PS_DEVICE_VIEW_WIDGETS&&r&&r->kind==Choice?"Space next  +/- choose  Enter value":PS_DEVICE_VIEW_DIALOGS?"Enter edit  F2 dialog":"Enter edit";
-    out.raw(hint);out.raw("\r\n"); // Trusted bounded literals, including Unicode key symbols.
-    out.raw(s.unicode?"\xe2\x86\x91/\xe2\x86\x93 select  Tab pages  Esc back":"Up/Down select  Tab pages  Esc back");out.raw("\r\n");
-    char status[64];ps_terminal_format(status,sizeof(status),"%u-%u / %u",count?start+1:0,count<start+visible?count:start+visible,count);
-    ink(out,1);out.raw(status);out.raw("  ");ink(out,0);out.safe(notice_,w-unsigned(ps_text_length(status))-2);out.raw("\r\n");
+    char status[64];ps_terminal_format(status,sizeof(status),"%u / %u",count?selected_+1:0,count);
+    ink(out,1);out.raw(status);out.raw("  ");ink(out,0);
+    const char *context=*notice_?notice_:r&&r->pending?"Waiting for readback":r&&!r->editable?"Read only":"";
+    out.safe(context,w-unsigned(ps_text_length(status))-2);out.raw("\r\n");footer(out,s,w);
     if(ansi_)out.raw("\x1b[J");
     if(PS_DEVICE_VIEW_DIALOGS&&dialog_&&editing_&&ansi_){
         const unsigned dw=w<74?w-4:70,left=(w-dw)/2+1,top=s.lines/2-3;
@@ -215,7 +313,7 @@ template<class W> void renderDiagnostics(Writer<W> &out,const Snapshot &snapshot
                 if (ansi_) {
                     ink(out,0);
                 }
-                out.raw(width<50?(snapshot.unicode?"\xe2\x86\x91/\xe2\x86\x93 \xe2\x86\x90/\xe2\x86\x92  w/r/o\r\n":"Up/Down Left/Right  w/r/o\r\n"):snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 \xe2\x86\x90/\xe2\x86\x92 "
+                if(!PS_DEVICE_VIEW_TABLE)out.raw(width<50?(snapshot.unicode?"\xe2\x86\x91/\xe2\x86\x93 \xe2\x86\x90/\xe2\x86\x92  w/r/o\r\n":"Up/Down Left/Right  w/r/o\r\n"):snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 \xe2\x86\x90/\xe2\x86\x92 "
                                            "move  w white  r red  o off\r\n"
                                          : "Up/Down Left/Right  w white r red o off\r\n");
                 if (ansi_) {
@@ -240,7 +338,7 @@ template<class W> void renderDiagnostics(Writer<W> &out,const Snapshot &snapshot
                 ps_terminal_format(winner, sizeof(winner), "Winner %u  %s\r\n", snapshot.winner,
                                    snapshot.gameReady ? "Ready" : "AVR unavailable");
                 out.raw(winner);
-                out.raw("1-9 press box | r reset to white\r\n");
+                if(!PS_DEVICE_VIEW_TABLE)out.raw("1-9 press box | r reset to white\r\n");
             } else if (page_ == Pixel) {
                 syncPixel(snapshot);
                 const uint8_t count = group_ ? snapshot.groupCounts[groupAt(snapshot, pixel_)] : 1;
@@ -256,7 +354,7 @@ template<class W> void renderDiagnostics(Writer<W> &out,const Snapshot &snapshot
                 out.raw("\r\n");
                 if (ansi_)
                     ink(out,0);
-                out.raw(width<50?(snapshot.unicode?"\xe2\x86\x90/\xe2\x86\x92 +/-  g group  w/r/o\r\n":"Left/Right +/- g group w/r/o\r\n"):snapshot.unicode
+                if(!PS_DEVICE_VIEW_TABLE)out.raw(width<50?(snapshot.unicode?"\xe2\x86\x90/\xe2\x86\x92 +/-  g group  w/r/o\r\n":"Left/Right +/- g group w/r/o\r\n"):snapshot.unicode
                             ? "\xe2\x86\x90/\xe2\x86\x92 +/- step  g group  w/r/o color\r\n"
                             : "Left/Right +/- step  g group  w/r/o color\r\n");
                 if (ansi_)
