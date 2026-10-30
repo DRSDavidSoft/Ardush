@@ -965,7 +965,8 @@ class DeviceView {
                                       : lines_ < 24 ? 4 : 8;
             return 4 + (selected_ < visible ? selected_ : visible - 1);
         }
-        return lines_ > 24 ? 23 : lines_ - 1;
+        // The retained prompt belongs below the table, even in tall terminals.
+        return lines_;
     }
     template <typename Write> void editLine(Write write) const {
         Writer<Write> out(write, ansi_);
