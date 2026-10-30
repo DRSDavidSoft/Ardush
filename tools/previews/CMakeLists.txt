@@ -13,6 +13,8 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   set_target_properties(console_preview PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}/bin")
 endforeach()
 if(MSVC)
+  # Keep portable ISO C stdio in this host-only fixture; fopen errors are checked.
+  target_compile_definitions(console_preview PRIVATE _CRT_SECURE_NO_WARNINGS)
   target_compile_options(console_preview PRIVATE /W4 /WX)
 else()
   target_compile_options(console_preview PRIVATE -Wall -Wextra -Werror)
