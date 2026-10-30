@@ -70,6 +70,86 @@ static bool pageAvailable(unsigned p,const Snapshot &s) {
         (p!=Game||(PS_DEVICE_VIEW_DIAGNOSTICS&&s.canGame))&&(p!=TerminalPage||s.terminalSettings)&&
         (p!=Cloud||s.cloudSettings)&&(p!=Notifications||s.notificationSettings)&&(p!=Clock||s.clockSettings);
 }
+
+bool mouse(const ps_mouse_event &e,const Snapshot &s,Action &a){
+    const unsigned b=e.button,x=e.column,y=e.row,button=b&3,drag=b&32;
+    if(e.release){mouseDrag_=false;return false;}
+    if(!ansi_||s.columns<40||s.lines<16||x>s.columns||y>s.lines||(b&~127U)||(b&28U))return false;
+    if(b&64U){if(!editing_&&!grid_&&button<2)for(unsigned i=0;i<3;++i)arrow(button?'B':'A',s,a);return false;}
+    if(button!=0&&button!=2)return false;
+    if(drag&&!mouseDrag_)return false;
+    if(!drag)mouseDrag_=true;
+    const unsigned width=s.columns>(PS_DEVICE_VIEW_TABLE?240:100)?(PS_DEVICE_VIEW_TABLE?240:100):s.columns;
+    const unsigned offset=PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_VERTICAL_TABS&&tabs_==VerticalTabs&&width>=64?22:0;
+    const unsigned w=width-1-offset,shift=tabsInsideTable_?0:1,body=PS_DEVICE_VIEW_TABLE?6+shift:4;
+    if(editing_){
+        if(button==2&&!drag){clearDraft();dirty_=full_=true;return false;}
+        if(y==editRow_&&x>=editColumn_&&x<editColumn_+editWidth_){
+            const size_t start=cursor_>=editWidth_?cursor_-editWidth_+1:0;
+            cursor_=start+x-editColumn_;if(cursor_>ps_text_length(draft_))cursor_=ps_text_length(draft_);
+            dirty_=true;
+        }
+        return false;
+    }
+    if(PS_DEVICE_VIEW_TABLE&&!drag){
+        unsigned hit=PageCount;
+        if(offset&&x<=20&&y>=3&&y<s.lines-3U){unsigned row=3;for(unsigned p=0;p<PageCount;++p)if(pageAvailable(p,s)){if(row++==y)hit=p;}}
+        else if(!offset&&y==2+shift){
+            unsigned total=0,left=3;
+            for(unsigned p=0;p<PageCount;++p)if(pageAvailable(p,s))total+=unsigned(ps_text_length(pageName(p)))+3;
+            for(unsigned p=0;p<PageCount;++p){
+                if(!pageAvailable(p,s)||(total>w-4&&p!=page_))continue;
+                unsigned n=unsigned(ps_text_length(pageName(p)))+3;
+                if(x>=left&&x<left+n)hit=p;
+                left+=n;
+            }
+        }
+        if(hit<PageCount){page_=Page(hit);selected_=0;sectionFocus_=grid_=false;dirty_=full_=true;return false;}
+    }
+    if(!PS_DEVICE_VIEW_TABLE&&!drag&&y==2){
+        unsigned left=3;
+        for(unsigned p=0;p<PageCount;++p){
+            if(!pageAvailable(p,s)||(width<80&&p!=page_))continue;
+            const char *label=p==Led?"LEDs":p==TerminalPage?"Term":p==Clock?"Time":p==Notifications?"Notify":pageName(p);
+            const unsigned n=unsigned(ps_text_length(label))+2;
+            if(left+n>width-2)continue;
+            if(x>=left&&x<left+n){page_=Page(p);selected_=0;sectionFocus_=grid_=false;dirty_=full_=true;return false;}
+            left+=n;
+        }
+    }
+    if(grid_)return false;
+    if(x<=offset+1||y<body||y>=body+mouseVisible_)return false;
+    uint16_t items[PS_DEVICE_VIEW_MAX_ROWS*4];unsigned focus;
+    const unsigned total=sectionItems(s,items,focus,PS_DEVICE_VIEW_TABLE!=0);
+    unsigned line=mouseStart_+y-body;
+    if(x==offset+w&&total>mouseVisible_){
+        line=(y-body)*(total-1)/(mouseVisible_>1?mouseVisible_-1:1);
+        while(line<total&&(items[line]&0x6000))++line;
+    }
+    if(line>=total||(items[line]&0x6000))return false;
+    selected_=uint8_t(items[line]&0x1fff);sectionFocus_=!!(items[line]&0x8000);dirty_=true;
+    if(x==offset+w)return false;
+    if(sectionFocus_){if(!drag)toggleSection(s,0);return false;}
+    const Row *r=currentRow(s);if(!r)return false;
+    if(button==2&&!drag)return startDialog(s,a);
+    const unsigned labelWidth=PS_DEVICE_VIEW_TABLE?(w<59?12:w<95?24:28):(width<60?12:22);
+    const unsigned valueX=offset+labelWidth+(PS_DEVICE_VIEW_TABLE?6:7)+(PS_DEVICE_VIEW_TABLE&&groups_==CategoryColumn&&w>=95?19:0);
+    if(x<valueX)return false;
+    if(!r->editable||r->pending||r->secret||!keySafe(r->key))return false;
+    if(PS_DEVICE_VIEW_WIDGETS&&r->kind==Level&&r->maximum>r->minimum&&r->step){
+        uint32_t observed;if(!decimal(r->value,observed)||observed<r->minimum||observed>r->maximum)return false;
+        const unsigned span=offset+w>valueX+2?offset+w-valueX-2:1;
+        const unsigned position=x-valueX>span?span:x-valueX;
+        const uint32_t range=r->maximum-r->minimum;
+        uint32_t n=r->minimum+(range/span)*position+(range%span)*position/span;
+        n=r->minimum+((n-r->minimum)/r->step)*r->step;
+        if(position==span)n=r->maximum;
+        if(n==observed)return false;
+        numberText(a.value,n);copy(a.key,sizeof a.key,r->key);a.type=Action::Set;return true;
+    }
+    if(!drag){if(PS_DEVICE_VIEW_WIDGETS&&(r->kind==Toggle||r->kind==Choice))return adjust(' ',s,a);return feed('\r',s,a);}
+    return false;
+}
 template<class W> void base(Writer<W> &out) const {if(ansi_)out.raw(ps_style_base(theme_,trueColor_));}
 template<class W> void ink(Writer<W> &out,unsigned role) const {if(ansi_)out.raw(ps_style_ink(theme_,trueColor_,theme_!=Semantic,role));}
 template<class W> void edge(Writer<W> &out,const Snapshot &s,const char *unicode,const char *ascii) const {
@@ -289,6 +369,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     if(visible>(total?total:1))visible=total?total:1;
     if(paintedRows_!=visible){paintAll=true;paintedRows_=visible;}
     const unsigned start=selectedLine>=visible?selectedLine-visible+1:0;
+    mouseStart_=start;mouseVisible_=visible;
     gridRule(out,s,w,groupWidth,labelWidth,total&&(logical[start]&0xe000)?"\xe2\x94\xb4":"\xe2\x94\xbc","\xe2\x94\x9c","\xe2\x94\xa4");
     for(unsigned i=0;i<visible;++i){
         const unsigned line=start+i,at=line<total?(logical[line]&0x1fff):count;
