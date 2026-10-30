@@ -26,3 +26,10 @@ add_test(NAME shared_source_hashes COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_
 add_executable(portable_console_batch host/batch.c)
 target_link_libraries(portable_console_batch PRIVATE portable_console)
 install(DIRECTORY SerialConsole/src/ DESTINATION include/portable_console FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+foreach(mode CHECK UPDATE)
+  string(TOLOWER "${mode}" target_mode)
+  add_custom_target(previews_${target_mode}
+    COMMAND "${CMAKE_COMMAND}" "-DMODE=${mode}" "-DBUILD_DIR=${CMAKE_BINARY_DIR}/previews"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/rebuild-previews.cmake"
+    USES_TERMINAL VERBATIM)
+endforeach()
