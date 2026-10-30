@@ -233,7 +233,7 @@ template<class W> void matrix(Writer<W> &out,const Snapshot &s,unsigned w){
         for(unsigned i=0;i<6;++i)hex[i+1]=digits[(rgb>>(20-4*i))&15];
         if(state<4){out.raw("  ");out.raw(hex);}ink(out,0);out.raw("  ");
         out.safe(*notice_?notice_:"Configured state colors",w-35);}
-    else if(*notice_){const unsigned n=unsigned(ps_text_length(status));if(n+2<w){out.raw("  ");out.safe(notice_,w-n-2);}}
+    else if(*notice_){const unsigned statusLength=unsigned(ps_text_length(status));if(statusLength+2<w){out.raw("  ");out.safe(notice_,w-statusLength-2);}}
     out.raw("\r\n");footer(out,s,s.columns-1);
 }
 template<class Write> bool renderTable(const Snapshot &s,Write write) {

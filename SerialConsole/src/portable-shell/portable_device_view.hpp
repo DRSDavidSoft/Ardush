@@ -601,12 +601,12 @@ class DeviceView {
             }
         }
         void safe(const char *text, size_t width) {
-            char clean[241];
+            char clean[241];clean[0]=0;
             terminalText(clean, width + 1 < sizeof(clean) ? width + 1 : sizeof(clean), text);
             raw(clean);
         }
         void field(const char *text, size_t width) {
-            char clean[241];
+            char clean[241];clean[0]=0;
             const size_t n =
                 terminalText(clean, width + 1 < sizeof(clean) ? width + 1 : sizeof(clean), text);
             raw(clean);
