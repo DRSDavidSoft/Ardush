@@ -4,8 +4,14 @@
 #ifndef PS_STYLE_THEMES
 #define PS_STYLE_THEMES 1
 #endif
+/* Stable role IDs: color follows meaning, never the target architecture. */
+enum { PS_STYLE_SEMANTIC=4, PS_INK_MUTED=0, PS_INK_COMMAND=1,
+       PS_INK_WARNING=2, PS_INK_ERROR=3, PS_INK_TEXT=4, PS_INK_SUCCESS=5,
+       PS_INK_HEADING=6, PS_INK_BORDER=7, PS_INK_STRING=8,
+       PS_INK_NUMBER=9, PS_INK_INACTIVE=10, PS_INK_ACTION=11 };
 static inline const char *ps_style_base(unsigned theme, int rgb) {
     if (!PS_STYLE_THEMES) return "\033[0m";
+    if(theme==PS_STYLE_SEMANTIC)return rgb?"\033[0;38;2;230;233;239;48;2;24;26;31m":"\033[0;38;5;255;48;5;234m";
     if (!rgb) return "\033[0;38;5;255;48;5;234m";
     return theme==3 ? "\033[0;38;2;171;178;191;48;2;40;44;52m" :
            theme==2 ? "\033[0;38;2;220;228;238;48;2;12;18;29m" :
@@ -14,6 +20,22 @@ static inline const char *ps_style_base(unsigned theme, int rgb) {
 }
 static inline const char *ps_style_ink(unsigned theme, int rgb, int red_border, unsigned kind) {
     if (!PS_STYLE_THEMES) return "";
+    static const char *const semantic_rgb[]={
+        "\033[38;2;151;160;175m", "\033[38;2;216;160;255m",
+        "\033[38;2;255;204;102m", "\033[38;2;255;107;122m",
+        "\033[38;2;230;233;239m", "\033[38;2;126;224;163m",
+        "\033[38;2;112;211;235m", "\033[38;2;108;119;137m",
+        "\033[38;2;166;218;149m", "\033[38;2;255;184;108m",
+        "\033[38;2;151;160;175m", "\033[38;2;112;211;235m"};
+    static const char *const semantic_ansi[]={
+        "\033[38;5;247m", "\033[38;5;183m", "\033[38;5;221m", "\033[38;5;203m",
+        "\033[38;5;255m", "\033[38;5;114m", "\033[38;5;80m", "\033[38;5;243m",
+        "\033[38;5;150m", "\033[38;5;215m", "\033[38;5;247m", "\033[38;5;80m"};
+    if(theme==PS_STYLE_SEMANTIC){
+        if(kind==PS_INK_BORDER&&red_border)kind=PS_INK_ERROR;
+        return (rgb?semantic_rgb:semantic_ansi)[kind%12];
+    }
+    if(kind>=8)kind=1; /* Preserve explicitly selected legacy palettes. */
     static const char *const original[] = {"\033[38;5;245m", "\033[38;5;80m",    "\033[38;5;223m",
                                            "\033[38;5;203m", "\033[1;38;5;231m", "\033[38;5;151m",
                                            "\033[38;5;80m",  "\033[38;5;245m"};
@@ -43,6 +65,10 @@ static inline const char *ps_style_ink(unsigned theme, int rgb, int red_border, 
 }
 static inline const char *ps_style_surface(unsigned theme, int rgb, unsigned active) {
     if (!PS_STYLE_THEMES) return "";
+    if(theme==PS_STYLE_SEMANTIC){
+        if(!rgb)return active==1?"\033[48;5;252;38;5;234m":active==2?"\033[48;5;237m":"\033[48;5;236;38;5;255m";
+        return active==1?"\033[48;2;211;218;230m\033[38;2;24;26;31m":active==2?"\033[48;2;48;55;67m":"\033[48;2;36;41;50m\033[38;2;230;233;239m";
+    }
     if (theme == 2)
         return active == 1   ? "\033[48;5;23;38;5;159;1m"
                  : active == 2 ? "\033[48;5;236m"
@@ -63,6 +89,15 @@ static inline const char *ps_style_surface(unsigned theme, int rgb, unsigned act
         return active == 1   ? "\033[48;2;209;111;232m\033[38;2;30;16;40m"
                  : active == 2 ? "\033[48;2;62;37;78m"
                                : "\033[48;2;45;31;59m\033[38;2;225;194;247m";
+}
+
+/* Prompt-only consumers must not retain whole table palettes in static RAM. */
+static inline const char *ps_style_prompt(unsigned theme, int rgb) {
+    if (!PS_STYLE_THEMES) return "";
+    if (theme==PS_STYLE_SEMANTIC) return rgb?"\033[38;2;112;211;235m":"\033[38;5;80m";
+    if (theme==2) return "\033[38;5;80m";
+    if (!rgb) return "\033[38;5;213m";
+    return theme==3?"\033[38;2;198;120;221m":theme==1?"\033[38;2;255;107;138m":"\033[38;2;232;121;249m";
 }
 
 #endif

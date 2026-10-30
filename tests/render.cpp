@@ -1,4 +1,4 @@
-/* Host-only fixture: actual emitted bytes, simulated LED, default Violet theme.
+/* Host-only fixture: actual emitted bytes, simulated LED, default semantic colors.
  * Link to PortableShell tests/render.c; no copied terminal renderer here. */
 #include "portable_console_view.hpp"
 #include <cstdio>
