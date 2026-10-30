@@ -143,8 +143,8 @@ template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const
 template<class W> void blankRows(Writer<W> &out,const Snapshot &s,unsigned first,unsigned last,
                                  unsigned w,unsigned group=0,unsigned label=0) const {
     if(!ansi_)return;
-    base(out);ink(out,7);
-    if(!PS_DEVICE_VIEW_TABLE)out.raw("\x1b[31m");
+    if(PS_DEVICE_VIEW_TABLE){base(out);ink(out,7);}
+    else out.raw("\x1b[0;31m");
     for(unsigned row=first;row<=last;++row){
         out.position(row);out.raw("\x1b[K");
         out.raw(s.unicode?"\xe2\x94\x82":"|");
@@ -152,7 +152,7 @@ template<class W> void blankRows(Writer<W> &out,const Snapshot &s,unsigned first
         if(label){out.position(row,label+4+(group?group+3:0));out.raw(s.unicode?"\xe2\x94\x82":"|");}
         out.position(row,w);out.raw(s.unicode?"\xe2\x94\x82":"|");
     }
-    base(out);
+    if(PS_DEVICE_VIEW_TABLE)base(out);else out.raw("\x1b[0m");
 }
 
 template<class W> void sidebar(Writer<W> &out,const Snapshot &s,unsigned height) const {
@@ -302,7 +302,11 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
         painted_[i]=stamp;
         out.position(6+i);
         edge(out,s,"\xe2\x94\x82 ","| ");
-        if(group){ink(out,6);out.raw(s.unicode?"\xe2\x94\x80 ":"- ");out.field(r->category,w-6);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");continue;}
+        if(group){
+            ink(out,6);out.raw(s.unicode?"\xe2\x94\x80 ":"- ");out.field(r->category,labelWidth-2);
+            edge(out,s," \xe2\x94\x82 "," | ");out.field("",valueWidth);
+            edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");continue;
+        }
         if(category)cell(r&&(i==0||!ps_text_equal(r->category,s.rows[at-1].category))?r->category:"",groupWidth);
         if(selected&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,2));
         ink(out,selected?1:4);out.raw(selected?(s.unicode?"\xe2\x96\xb8 ":"> "):"  ");
