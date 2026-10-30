@@ -208,7 +208,8 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     for(unsigned i=0;i<PageCount;++i){
         if(!pageAvailable(i,s)||(tabTotal>w-4&&i!=page_))continue;
         if(i==page_&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
-        out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"] ":"  ");base(out);
+        out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"]":" ");base(out);
+        out.raw(" "); // Inter-tab spacing is outside the selected surface.
         used+=unsigned(ps_text_length(pageName(i)))+3;
     }
     if(tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u",unsigned(page_)+1,unsigned(PageCount));
