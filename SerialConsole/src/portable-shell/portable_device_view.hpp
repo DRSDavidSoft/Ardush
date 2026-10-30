@@ -137,6 +137,7 @@ class DeviceView {
         dirty_ = full_ = true;
         lastHash_ = 0;
         escape_ = escapeBytes_ = attribute_ = 0;
+        mouseDrag_=false;
         crPending_ = false;
         cell_ = 1;
         pixel_ = 0;
@@ -146,6 +147,10 @@ class DeviceView {
     }
     bool active() const {
         return active_;
+    }
+    template<class Write> void end(Write write) {
+        if(ansi_&&PS_MOUSE){const char *p="\x1b[?1002l\x1b[?1006l";write((const uint8_t*)p,ps_text_length(p));}
+        active_=false;mouseDrag_=false;clearDraft();
     }
     bool editing() const {
         return editing_;
@@ -235,6 +240,16 @@ class DeviceView {
         if (ch != '\n' && ch != '\r')
             crPending_ = false;
         if (escape_) {
+            if(escape_==4){
+                if(unsigned(escapeBytes_)+1>=sizeof(mousePacket_)){escape_=5;return false;}
+                mousePacket_[escapeBytes_++]=char(ch);mousePacket_[escapeBytes_]=0;
+                if(ch>=0x40&&ch<=0x7e){
+                    ps_mouse_event event;escape_=0;
+                    if(PS_MOUSE&&ps_mouse_parse(mousePacket_,&event))return mouse(event,snapshot,action);
+                }
+                return false;
+            }
+            if(escape_==5){if(ch>=0x40&&ch<=0x7e)escape_=0;return false;}
             if (escape_ == 1) {
                 if (ch == '[' || ch == 'O') {
                     escape_ = 2;
@@ -244,6 +259,9 @@ class DeviceView {
                 if (ch >= 'A' && ch <= 'D')
                     return arrow(ch, snapshot, action);
                 return false;
+            }
+            if(PS_MOUSE&&escape_==2&&ch=='<'&&escapeBytes_==0){
+                escape_=4;escapeBytes_=1;mousePacket_[0]='<';return false;
             }
             if (++escapeBytes_ > 16) {
                 escape_ = escapeBytes_ = 0;
@@ -421,6 +439,7 @@ class DeviceView {
         if (!dirty_ && !force)
             return false;
         dirty_ = false;
+        if(PS_MOUSE&&ansi_&&full_){const char *p="\x1b[?1002h\x1b[?1006h";write((const uint8_t*)p,ps_text_length(p));}
         if (force) full_=true;
         if (editing_ && ansi_ && columns_ >= 40 && lines_ >= 16 && !full_ && !force) {
             editLine(write);
@@ -515,6 +534,7 @@ class DeviceView {
                                     : snapshot.lines < 24 ? 4
                                                           : 8;
             const uint8_t start = selected_ >= visible ? selected_ - visible + 1 : 0;
+            mouseStart_=start;mouseVisible_=visible;
             for (uint8_t i = 0; i < visible; ++i) {
                 const uint8_t at = start + i;
                 if (ansi_)
@@ -1186,6 +1206,9 @@ class DeviceView {
     bool active_ = false, ansi_ = true, dirty_ = true, full_ = true, editing_ = false,
          secret_ = false, draftChanged_ = false, grid_ = false, group_ = false, crPending_ = false;
     uint8_t escape_ = 0, escapeBytes_ = 0, attribute_ = 0;
+    char mousePacket_[PS_MOUSE?24:1]{};
+    bool mouseDrag_=false;
+    unsigned mouseStart_=0,mouseVisible_=0;
     uint32_t lastHash_ = 0;
     char draft_[385]{}, editKey_[32]{}, editLabel_[49]{}, notice_[65]{};
 };

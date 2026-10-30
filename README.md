@@ -1,5 +1,11 @@
 # SerialConsole
 
+Interactive views accept SGR mouse bytes: click tabs, rows and values; scroll the
+wheel, drag levels or the scrollbar, and right-click a value to edit its dialog.
+Terminal reporting is released on view exit. `PS_MOUSE=0` excludes mouse handling.
+The provider still owns validation and physical actions. The terminal must support
+SGR mouse reporting; no mouse-specific OS calls are needed in the console core.
+
 The repository keeps its historical name and attribution. Reusable code uses
 `portable_console_*`, `PS_CONSOLE_*`, and `SerialConsole/SerialConsole.ino`.
 Update old `ardush_*` / `ARDUSH_*` identifiers and includes together; old

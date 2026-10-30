@@ -42,6 +42,7 @@ struct ConsoleView {
     void apply(portable_console *s, const PortableShell::DeviceView::Action &action) {
         using View = PortableShell::DeviceView;
         if (action.type == View::Action::Exit) {
+            view.end([s](const uint8_t *p,size_t n){portable_console_write(s,p,n);});
             if (alternate) portable_console_put(s, "\033[?1049l");
             alternate = false; s->mode = PS_CONSOLE_PROMPT; portable_console_prompt(s); return;
         }

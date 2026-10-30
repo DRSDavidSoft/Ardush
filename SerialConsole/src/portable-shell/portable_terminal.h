@@ -171,6 +171,31 @@ static inline size_t ps_decimal(char *out, unsigned value) {
     out[n] = 0;
     return n;
 }
+#ifndef PS_MOUSE
+#define PS_MOUSE 1
+#endif
+/* SGR mouse payload following CSI: <button;column;row M/m. One-based cells.
+   Parse atomically: malformed/overflowing packets never become UI actions. */
+typedef struct { unsigned button, column, row, release; } ps_mouse_event;
+static inline int ps_mouse_parse(const char *p, ps_mouse_event *event) {
+    unsigned values[3],i;
+    if (*p++!='<') return 0;
+    for(i=0;i<3;++i){
+        unsigned n=0,digits=0;
+        while(*p>='0'&&*p<='9'){
+            if(++digits>5 || n>6553 || (n==6553&&*p>'5'))return 0;
+            n=n*10+(unsigned)(*p-'0');
+            ++p;
+        }
+        if(!digits)return 0;
+        values[i]=n;
+        if(i<2&&*p++!=';')return 0;
+    }
+    if(!values[1]||!values[2]||(*p!='M'&&*p!='m')||p[1])return 0;
+    event->button=values[0];event->column=values[1];event->row=values[2];event->release=*p=='m';
+    return 1;
+}
+
 /* Consume one complete escape sequence, including private string payloads.
  * Input is NUL-terminated or bounded by maximum; never scan beyond that bound. */
 static inline size_t ps_escape_span(const char *s, size_t maximum) {

@@ -18,6 +18,12 @@ int main() {
 #else
     assert(out.find("\xe2\x86\x91/\xe2\x86\x93") != std::string::npos);
 #endif
+#if PS_MOUSE && PS_DEVICE_VIEW_TABLE
+    assert(out.find("\033[?1006h")!=std::string::npos);
+    feed(&s,"\033[<0;50;7M\033[<0;50;7m");assert(led&&writes==1);
+    feed(&s,"\033[<0;50;7M\033[<0;50;7m");assert(!led&&writes==2);
+    writes=0; // Start the existing keyboard/edit scenario from its original baseline.
+#endif
     out.clear(); feed(&s, "\r\025on");
     assert(!led && writes == 0 && portable_console_ui.view.editing());
 #if PS_DEVICE_VIEW_TABLE
@@ -36,6 +42,9 @@ int main() {
     feed(&s, "\r\025off\r"); assert(!s.editor.upper && writes == 1);
     feed(&s, "\033"); portable_console_tick(&s, 70); portable_console_view_tick(&s);
     assert(s.mode == PS_CONSOLE_PROMPT && out.find("\033[?1049l") != std::string::npos);
+#if PS_MOUSE
+    assert(out.find("\033[?1006l")!=std::string::npos);
+#endif
     out.clear();feed(&s,"view vertical\r");
     assert(s.mode==PS_CONSOLE_VIEW&&writes==1);
     assert(portable_console_ui.view.tabLayout()==PortableShell::DeviceView::VerticalTabs);
