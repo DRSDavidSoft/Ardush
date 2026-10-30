@@ -92,7 +92,7 @@ static inline void ps_editor_prompt(ps_editor *s, ps_terminal_write write, void 
     if (!s->echo)
         return;
     if (s->ansi)
-        ps_term_emit(write, ctx, s->theme <= PS_STYLE_SEMANTIC ? ps_style_ink(s->theme, s->true_color, 0, s->theme==PS_STYLE_SEMANTIC?PS_INK_HEADING:PS_INK_COMMAND) : PS_EDITOR_PROMPT_STYLE);
+        ps_term_emit(write, ctx, s->theme <= PS_STYLE_SEMANTIC ? ps_style_prompt(s->theme, s->true_color) : PS_EDITOR_PROMPT_STYLE);
     ps_term_emit(write, ctx, s->prompt);
     ps_term_emit(write, ctx, "> ");
     if (s->ansi)

@@ -91,4 +91,13 @@ static inline const char *ps_style_surface(unsigned theme, int rgb, unsigned act
                                : "\033[48;2;45;31;59m\033[38;2;225;194;247m";
 }
 
+/* Prompt-only consumers must not retain whole table palettes in static RAM. */
+static inline const char *ps_style_prompt(unsigned theme, int rgb) {
+    if (!PS_STYLE_THEMES) return "";
+    if (theme==PS_STYLE_SEMANTIC) return rgb?"\033[38;2;112;211;235m":"\033[38;5;80m";
+    if (theme==2) return "\033[38;5;80m";
+    if (!rgb) return "\033[38;5;213m";
+    return theme==3?"\033[38;2;198;120;221m":theme==1?"\033[38;2;255;107;138m":"\033[38;2;232;121;249m";
+}
+
 #endif
