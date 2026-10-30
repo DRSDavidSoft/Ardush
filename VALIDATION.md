@@ -154,3 +154,25 @@ Remaining acceptance: physical AVR/STM32 upload, UART/USB behavior on the actual
 board, LED polarity/readback, interrupt-load stack margin and human interaction.
 No running shell, installed production application, board firmware or settings
 were changed. Source, CI, simulator, picture and physical acceptance are separate.
+
+## PortableShell refresh, 2026-10-31
+
+Components are pinned to `3a7eeba179c238226deef1b64e3bd3b86c4e12e7`.
+All seven native tests pass. All ten preview pairs rebuild from emitted bytes;
+the full table preview was inspected. These are fixtures, not board captures.
+
+| Compiled profile | Flash bytes | Static RAM bytes | Remaining RAM bytes |
+| --- | ---: | ---: | ---: |
+| Uno, device view disabled explicitly | 11212 | 1567 | 481 |
+| Mega2560, device view enabled | 50744 | 6421 | 1771 |
+| Generic STM32F103C8, PC13 active-low | 45740 | 2928 | 17552 |
+
+These figures include the shared editor's default two-step undo history.
+For a constrained consumer, `-DPS_EDITOR_UNDO_DEPTH=0` explicitly removes that
+history; architecture alone does not remove features. The AVR toolchain warns
+about SRAM headroom. Remaining RAM is not measured stack margin or runtime proof.
+No board was flashed. Earlier artifact hashes above describe older builds.
+
+The standalone headers do not expose the full-session F7 history dialog,
+history expansion or hex editor. Those require the corresponding full-core
+integration and flags; updating header components does not implicitly enable them.

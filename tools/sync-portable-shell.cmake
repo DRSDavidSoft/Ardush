@@ -10,7 +10,7 @@ endif()
 set(destination "${CMAKE_CURRENT_LIST_DIR}/../SerialConsole/src/portable-shell")
 file(MAKE_DIRECTORY "${destination}")
 set(manifest "# https://github.com/atomicdeploy/portable-shell\n# commit ${revision}\n")
-foreach(name portable_terminal.h portable_editor.h portable_parse.h portable_probe.h portable_shell_editor.hpp portable_device_view.hpp portable_device_table.hpp portable_style.h portable_meter.h)
+foreach(name portable_terminal.h portable_editor.h portable_parse.h portable_probe.h portable_shell_editor.hpp portable_device_view.hpp portable_device_table.hpp portable_style.h portable_meter.h portable_table_policy.h portable_util.h portable_undo.h)
   # Export Git blob bytes, independent of the source checkout's autocrlf mode.
   execute_process(COMMAND git show "${revision}:include/${name}" WORKING_DIRECTORY "${PORTABLE_SHELL_SOURCE}" OUTPUT_FILE "${destination}/${name}" COMMAND_ERROR_IS_FATAL ANY)
   file(SHA256 "${destination}/${name}" checksum)
