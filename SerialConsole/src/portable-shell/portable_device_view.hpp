@@ -1,3 +1,4 @@
+#include "portable_table_policy.h"
 #ifndef PORTABLE_DEVICE_VIEW_HPP
 #define PORTABLE_DEVICE_VIEW_HPP
 #include "portable_shell_editor.hpp"
@@ -11,6 +12,9 @@
 #endif
 #ifndef PS_DEVICE_VIEW_INLINE_EDIT
 #define PS_DEVICE_VIEW_INLINE_EDIT 1
+#endif
+#ifndef PS_DEVICE_VIEW_PLAIN_ROWS
+#define PS_DEVICE_VIEW_PLAIN_ROWS 0
 #endif
 #ifndef PS_DEVICE_VIEW_TABLE
 #define PS_DEVICE_VIEW_TABLE 1
@@ -57,7 +61,7 @@
 namespace PortableShell {
 class DeviceView {
   public:
-    enum Theme : uint8_t { Violet, Red, Lumen, OneDark, Semantic };
+    enum Theme : uint8_t { Violet=PS_THEME_VIOLET, Red=PS_THEME_RED, Cyan=PS_THEME_CYAN, OneDark=PS_THEME_ONE_DARK, Default=PS_THEME_DEFAULT };
     enum TabLayout : uint8_t { HorizontalTabs, VerticalTabs };
     enum GroupLayout : uint8_t { SectionRows, CategoryColumn };
     enum Kind : uint8_t { Text, Toggle, Level, Choice };
@@ -190,7 +194,7 @@ class DeviceView {
             dirty_ = full_ = true;
         }
     }
-    void setTheme(Theme theme) { if (theme <= Semantic && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
+    void setTheme(Theme theme) { if (theme <= Default && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
     Theme theme() const { return theme_; }
     void setTabLayout(TabLayout layout) {
         if (layout <= VerticalTabs && tabs_ != layout) { tabs_=layout;dirty_=full_=true; }
@@ -207,14 +211,22 @@ class DeviceView {
         if(!editing_ && sectionBorders_!=enabled){sectionBorders_=enabled;dirty_=full_=true;}
     }
     bool sectionBorders() const { return sectionBorders_; }
+    void setSectionBottomBorder(bool enabled) {
+        if(!editing_ && sectionBottomBorder_!=enabled){sectionBottomBorder_=enabled;dirty_=full_=true;}
+    }
+    bool sectionBottomBorder() const { return sectionBottomBorder_; }
     void setTabsInsideTable(bool enabled) {
         if(!editing_ && tabsInsideTable_!=enabled){tabsInsideTable_=enabled;dirty_=full_=true;}
     }
     bool tabsInsideTable() const { return tabsInsideTable_; }
     void setFooterKeycaps(bool enabled){keycaps_=enabled;dirty_=full_=true;}
+    // Indicators: 0 chevrons (ASCII +/-), 1 +/-, 2 none.
+    void setSectionIndicators(unsigned style){if(!editing_&&style<3){sectionIndicators_=style;dirty_=full_=true;}}
+    void setSectionsCollapsible(bool enabled){if(!editing_){sectionsCollapsible_=enabled;dirty_=full_=true;}}
+    void setReserveScrollbar(bool enabled){reserveScrollbar_=enabled;dirty_=full_=true;}
     void setCompactScrollbar(bool enabled){compactScrollbar_=enabled;dirty_=full_=true;}
     // Caller retains the marker string for the lifetime of this setting.
-    void setSelectionMarker(const char *marker){selectionMarker_=marker?marker:"";dirty_=full_=true;}
+    void setSelectionMarker(const char *marker){selectionMarker_=marker;dirty_=full_=true;}
     void setFooterGrid(bool enabled){footerGrid_=enabled;dirty_=full_=true;}
     void setSynchronizedOutput(bool enabled){syncOutput_=enabled;}
     void setFooterEmphasis(bool enabled){footerEmphasis_=enabled;dirty_=full_=true;}
@@ -565,7 +577,7 @@ class DeviceView {
             (!i || !ps_text_equal(s.rows[i].category,s.rows[i-1].category));
     }
     bool sectionClosed(unsigned i) const {
-        return sections() && (closed_[page_][i/8] & (1U<<(i%8)));
+        return sectionsCollapsible_ && sections() && (closed_[page_][i/8] & (1U<<(i%8)));
     }
     void syncSections(const Snapshot &s) {
         if (!sections()) return;
@@ -603,7 +615,7 @@ class DeviceView {
                     if(frame&&sectionBorders_&&total&&!(items[total-1]&0x2000))items[total++]=uint16_t(i|0x4000);
                     if(selected_==i&&sectionFocus_)focus=total;
                     items[total++]=uint16_t(i|0x8000);closed=sectionClosed(i);
-                    if(frame&&sectionBorders_)items[total++]=uint16_t(i|0x2000);
+                    if(frame&&sectionBorders_&&sectionBottomBorder_)items[total++]=uint16_t(i|0x2000);
                 }
             }
             if(!closed){
@@ -614,7 +626,7 @@ class DeviceView {
         return total;
     }
     void toggleSection(const Snapshot &s,int direction) {
-        if(!sections()||!sectionFocus_||selected_>=rowCount(s)||!sectionStart(s,selected_))return;
+        if(!sectionsCollapsible_||!sections()||!sectionFocus_||selected_>=rowCount(s)||!sectionStart(s,selected_))return;
         uint8_t &bits=closed_[page_][selected_/8];const unsigned mask=1U<<(selected_%8);
         if(direction<0)bits|=uint8_t(mask);else if(direction>0)bits&=uint8_t(~mask);else bits^=uint8_t(mask);
         notice_[0]=0;dirty_=full_=true;
@@ -975,18 +987,21 @@ class DeviceView {
     }
     Page page_ = Device;
 #include "portable_device_table.hpp"
-    Theme theme_ = Semantic;
+    Theme theme_ = Default;
     TabLayout tabs_ = HorizontalTabs;
     GroupLayout groups_ = PS_DEVICE_VIEW_CATEGORY_COLUMN ? CategoryColumn : SectionRows;
     bool sectionFocus_ = false;
     bool sectionBorders_ = true;
+    bool sectionBottomBorder_ = false;
     bool tabsInsideTable_ = false;
     uint8_t closed_[PS_DEVICE_VIEW_SECTIONS?PageCount:1][PS_DEVICE_VIEW_SECTIONS?(PS_DEVICE_VIEW_MAX_ROWS+7)/8:1]{};
     uint32_t sectionSchema_[PS_DEVICE_VIEW_SECTIONS?PageCount:1]{};
     bool trueColor_ = true, dialog_ = false;
     bool keycaps_=PS_FOOTER_KEYCAPS!=0,tabBrackets_=PS_TAB_BRACKETS!=0;
     bool compactScrollbar_=false;
-    const char *selectionMarker_="";
+    const char *selectionMarker_=nullptr;
+    bool sectionsCollapsible_=true,reserveScrollbar_=false;
+    unsigned sectionIndicators_=0,paintedGutter_=0;
     bool footerGrid_=PS_FOOTER_GRID!=0,footerEmphasis_=false;
     bool syncOutput_=PS_SYNC_OUTPUT!=0;
     unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;

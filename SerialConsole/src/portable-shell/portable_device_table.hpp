@@ -1,3 +1,19 @@
+unsigned tableCapacity(const Snapshot &s,unsigned w) const {
+    const unsigned shift=tabsInsideTable_?0:1;
+    const unsigned diagnostics=page_==Led&&!PS_DEVICE_VIEW_MATRIX?(s.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
+    unsigned visible=s.lines>9+shift+diagnostics-(PS_DEVICE_VIEW_PLAIN_ROWS?2:0)?s.lines-9-shift-diagnostics+(PS_DEVICE_VIEW_PLAIN_ROWS?2:0):1;
+    if(visible>PS_DEVICE_VIEW_MAX_ROWS)visible=PS_DEVICE_VIEW_MAX_ROWS;
+    const unsigned reserve=8192U+unsigned(s.lines)*110U;
+    const unsigned budget=(PS_DEVICE_VIEW_FRAME_BYTES>reserve?PS_DEVICE_VIEW_FRAME_BYTES-reserve:1)/(w+450U);
+    if(visible>budget)visible=budget?budget:1;
+    return visible;
+}
+unsigned tableGutter(const Snapshot &s,unsigned width,unsigned offset) const {
+    if(!ansi_||compactScrollbar_||width-offset<64)return 0;
+    if(reserveScrollbar_)return 2;
+    uint16_t items[PS_DEVICE_VIEW_MAX_ROWS*4];unsigned focus;
+    return sectionItems(s,items,focus,true)>tableCapacity(s,width-1-offset)?2:0;
+}
 /* DeviceView members. Shared device presentation, independent of CPU/transport.
  * Typed controls and palettes follow portable_controls.inc; applications retain
  * validators, authorization, pending state and all physical side effects. */
@@ -80,7 +96,7 @@ bool mouse(const ps_mouse_event &e,const Snapshot &s,Action &a){
     if(!drag)mouseDrag_=true;
     const unsigned width=s.columns>240?240:s.columns;
     const unsigned offset=PS_DEVICE_VIEW_VERTICAL_TABS&&tabs_==VerticalTabs&&width>=64?22:0;
-    const unsigned w=width-1-offset-(ansi_&&!compactScrollbar_&&width-offset>=64?2:0),shift=tabsInsideTable_?0:1,body=6+shift;
+    const unsigned w=width-1-offset-tableGutter(s,width,offset),shift=tabsInsideTable_?0:1,body=6+shift-(PS_DEVICE_VIEW_PLAIN_ROWS?2:0);
     if(editing_){
         if(button==2&&!drag){clearDraft();dirty_=full_=true;return false;}
         if(y==editRow_&&x>=editColumn_&&x<editColumn_+editWidth_){
@@ -140,7 +156,7 @@ bool mouse(const ps_mouse_event &e,const Snapshot &s,Action &a){
     return false;
 }
 template<class W> void base(Writer<W> &out) const {if(ansi_)out.raw(ps_style_base(theme_,trueColor_));}
-template<class W> void ink(Writer<W> &out,unsigned role) const {if(ansi_)out.raw(ps_style_ink(theme_,trueColor_,theme_!=Semantic,role));}
+template<class W> void ink(Writer<W> &out,unsigned role) const {if(ansi_)out.raw(ps_style_ink(theme_,trueColor_,theme_!=Default,role));}
 template<class W> void edge(Writer<W> &out,const Snapshot &s,const char *unicode,const char *ascii) const {
     base(out);ink(out,7);out.raw(s.unicode?unicode:ascii);base(out);
 }
@@ -151,7 +167,7 @@ template<class W> void rule(Writer<W> &out,const Snapshot &s,unsigned width,cons
 }
 template<class W> void gridRule(Writer<W> &out,const Snapshot &s,unsigned w,unsigned group,unsigned label,const char *junction,const char *left,const char *right) const {
     base(out);ink(out,7);out.raw(s.unicode?left:"+");
-    for(unsigned i=1;i<w-1;++i){const bool join=i==label+3+(group?group+3:0)||(group&&i==group+3);
+    for(unsigned i=1;i<w-1;++i){const bool join=!PS_DEVICE_VIEW_PLAIN_ROWS&&(i==label+3+(group?group+3:0)||(group&&i==group+3));
         out.raw(s.unicode?(join?junction:"\xe2\x94\x80"):(join?"+":"-"));}
     out.raw(s.unicode?right:"+");base(out);out.raw("\r\n");
 }
@@ -159,17 +175,21 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
     if(r.secret){ink(out,0);out.field("[hidden]",width);return;}
     if(r.pending){ink(out,2);out.field("Pending readback",width);return;}
     if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Toggle){
-        const int on=toggle(r.value);ink(out,on<0?0:on?5:theme_==Semantic?PS_INK_INACTIVE:3);
+        const int on=toggle(r.value);ink(out,on<0?0:on?5:theme_==Default?PS_INK_INACTIVE:3);
         if(on<0){out.field("Unknown",width);return;}
         out.raw(s.unicode?(on?"\xe2\x97\x8f ":"\xe2\x97\x8b "):(on?"+ ":"- "));
         out.field(on?r.onLabel:r.offLabel,width-2);return;
+    }
+    if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Level&&r.meter&&r.meterStyle==PS_METER_CHEVRONS&&width>=6){
+        char text[244];ps_meter_value_field(text,sizeof text,width,r.value,s.unicode);
+        ink(out,PS_INK_NUMBER);out.raw(text);return;
     }
     uint32_t n;
     if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Level&&r.meter&&width>=22&&decimal(r.value,n)&&r.maximum>r.minimum&&n>=r.minimum&&n<=r.maximum){
         // At most ten cells, no multiplication overflow for uint32 ranges.
         const unsigned bar=10;const uint32_t span=r.maximum-r.minimum,offset=n-r.minimum;
         const unsigned filled=ps_meter_fraction(offset,span,bar);
-        for(unsigned i=0;i<bar;++i){ink(out,i<filled?PS_INK_NUMBER:0);out.raw(ps_meter_cell(r.meterStyle,i<filled,s.unicode));}
+        for(unsigned i=0;i<bar;++i){ink(out,i<filled?PS_INK_NUMBER:0);out.raw(ps_meter_track_cell(r.meterStyle,i<filled,s.unicode,i));}
         ink(out,PS_INK_NUMBER);out.raw(" ");char text[40];
         const unsigned percent=levelPercent(n-r.minimum,r.maximum-r.minimum);
         ps_terminal_format(text,sizeof(text),"%u%% (%u/%u)",percent,n,r.maximum);
@@ -177,7 +197,7 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
     }
     const char *shown=r.value;
     if(r.kind==Choice&&r.choices&&r.choiceLabels)for(unsigned i=0;i<r.choiceCount;++i)if(ps_text_equal(r.value,r.choices[i])){shown=r.choiceLabels[i];break;}
-    ink(out,theme_==Semantic?(r.kind==Level?PS_INK_NUMBER:r.kind==Choice?PS_INK_COMMAND:r.editable?PS_INK_STRING:PS_INK_TEXT):(r.editable?1:4));
+    ink(out,theme_==Default?(r.kind==Level?PS_INK_NUMBER:r.kind==Choice?PS_INK_COMMAND:r.editable?PS_INK_STRING:PS_INK_TEXT):(r.editable?1:4));
     if(r.unit&&*r.unit){char text[241];ps_terminal_format(text,sizeof(text),"%s %s",shown,r.unit);out.field(text,width);}
     else out.field(shown,width);
 }
@@ -210,6 +230,7 @@ template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const
         ps_style_footer_append(line,sizeof line,w>=60?"  W idle  R lost  O off":"  W/R/O state");
     }else if(grid_&&page_==Pixel){ps_style_footer_append(line,sizeof line,s.unicode?"\xe2\x86\x90/\xe2\x86\x92 test  G group  W/R/O color":"Left/Right test G group W/R/O color");}
     else if(page_==Game&&grid_){ps_style_footer_append(line,sizeof line,s.gameReady?"1-9 press  R reset":"AVR unavailable");}
+    else if(sectionFocus_&&!sectionsCollapsible_){ps_style_footer_append(line,sizeof line,s.unicode?"↑/↓ select":"Up/Down select");}
     else if(sectionFocus_){ps_style_footer_append(line,sizeof line,w<60?"Enter/Space toggle":s.unicode?"Enter/Space toggle  \xe2\x86\x90 collapse  \xe2\x86\x92 expand":"Enter/Space toggle  Left close Right open");}
     else {ps_style_footer_append(line,sizeof line,s.unicode?"\xe2\x86\x91/\xe2\x86\x93 select":"Up/Down select");
         if(r&&r->editable&&!r->pending){
@@ -233,8 +254,8 @@ template<class W> void blankRows(Writer<W> &out,const Snapshot &s,unsigned first
     for(unsigned row=first;row<=last;++row){
         out.position(row);out.raw("\x1b[K");
         out.raw(s.unicode?"\xe2\x94\x82":"|");
-        if(group){out.position(row,group+4);out.raw(s.unicode?"\xe2\x94\x82":"|");}
-        if(label){out.position(row,label+4+(group?group+3:0));out.raw(s.unicode?"\xe2\x94\x82":"|");}
+        if(group&&!PS_DEVICE_VIEW_PLAIN_ROWS){out.position(row,group+4);out.raw(s.unicode?"\xe2\x94\x82":"|");}
+        if(label&&!PS_DEVICE_VIEW_PLAIN_ROWS){out.position(row,label+4+(group?group+3:0));out.raw(s.unicode?"\xe2\x94\x82":"|");}
         out.position(row,w);out.raw(s.unicode?"\xe2\x94\x82":"|");
     }
     base(out);
@@ -330,9 +351,10 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     if(width<40||s.lines<16){out.raw(s.unicode?"Resize terminal to 40 \xc3\x97 16\r\n":"Resize terminal to 40 x 16\r\n");return true;}
     // Leave the physical terminal's last column free to avoid delayed autowrap.
     const unsigned offset=PS_DEVICE_VIEW_VERTICAL_TABS&&tabs_==VerticalTabs&&ansi_&&width>=64?22:0;
-    const unsigned gutter=ansi_&&!compactScrollbar_&&width-offset>=64?2:0;
+    const unsigned gutter=tableGutter(s,width,offset);
+    if(gutter!=paintedGutter_){paintAll=true;paintedGutter_=gutter;if(ansi_)out.raw("\x1b[H\x1b[2J");}
     const unsigned w=width-1-offset-gutter;
-    const unsigned shift=tabsInsideTable_?0:1,body=6+shift;
+    const unsigned shift=tabsInsideTable_?0:1,body=6+shift-(PS_DEVICE_VIEW_PLAIN_ROWS?2:0);
     if(offset){sidebar(out,s,s.lines-3);out.indent(offset);out.position(1);}
     base(out);ink(out,7);if(!shift)out.raw(s.unicode?"\xe2\x95\xad\xe2\x94\x80 ":"+- ");
     ink(out,4);char title[241];const unsigned titleSize=unsigned(terminalText(title,w-8,s.title));out.raw(title);
@@ -353,21 +375,18 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
         const unsigned n=unsigned(ps_text_length(hint));if(used+n<w-4){ink(out,0);out.raw(hint);used+=n;}}
     out.field("",w-4-used);if(shift)out.raw("  ");else edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     if(PS_DEVICE_VIEW_MATRIX&&page_==Led&&grid_&&s.canLeds){matrix(out,s,w,shift);return true;}
-    const bool category=groups_==CategoryColumn&&w>=95;
+    const bool category=!PS_DEVICE_VIEW_PLAIN_ROWS&&groups_==CategoryColumn&&w>=95;
     const unsigned groupWidth=category?16:0,labelWidth=w<59?12:w<95?24:28;
     const unsigned valueWidth=w-7-labelWidth-(category?groupWidth+3:0);
     gridRule(out,s,w,groupWidth,labelWidth,"┬",shift?"╭":"├",shift?"╮":"┤");
-    auto cell=[&](const char *text,unsigned n){ink(out,theme_==Semantic?PS_INK_HEADING:0);out.field(text,n);edge(out,s," \xe2\x94\x82 "," | ");};
+    auto cell=[&](const char *text,unsigned n){ink(out,theme_==Default?PS_INK_HEADING:0);out.field(text,n);edge(out,s," \xe2\x94\x82 "," | ");};
+    if(!PS_DEVICE_VIEW_PLAIN_ROWS){
     edge(out,s,"\xe2\x94\x82 ","| ");if(category)cell("Category",groupWidth);cell("Setting",labelWidth);
-    ink(out,theme_==Semantic?PS_INK_HEADING:0);out.field("Value",valueWidth);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
+    ink(out,theme_==Default?PS_INK_HEADING:0);out.field("Value",valueWidth);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
+    }
     const unsigned count=rowCount(s);if(selected_>=count)selected_=count?uint8_t(count-1):0;
     const unsigned diagnostics=page_==Led&&!PS_DEVICE_VIEW_MATRIX?(s.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
-    unsigned visible=s.lines>9+shift+diagnostics?s.lines-9-shift-diagnostics:1;
-    if(visible>PS_DEVICE_VIEW_MAX_ROWS)visible=PS_DEVICE_VIEW_MAX_ROWS;
-    // Bound complete frames rather than silently dropping their final border.
-    const unsigned reserve=8192U+unsigned(s.lines)*110U;
-    const unsigned budgetRows=(PS_DEVICE_VIEW_FRAME_BYTES > reserve ? PS_DEVICE_VIEW_FRAME_BYTES-reserve : 1)/(w+450U);
-    if(visible>budgetRows)visible=budgetRows?budgetRows:1;
+    unsigned visible=tableCapacity(s,w);
     // Separate logical rows from section headings without heap storage.
     uint16_t logical[PS_DEVICE_VIEW_MAX_ROWS*4];unsigned selectedLine;
     const unsigned total=sectionItems(s,logical,selectedLine,true);
@@ -375,7 +394,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     if(paintedRows_!=visible){paintAll=true;paintedRows_=visible;}
     const unsigned start=selectedLine>=visible?selectedLine-visible+1:0;
     mouseStart_=start;mouseVisible_=visible;
-    gridRule(out,s,w,groupWidth,labelWidth,total&&(logical[start]&0xe000)?"\xe2\x94\xb4":"\xe2\x94\xbc","\xe2\x94\x9c","\xe2\x94\xa4");
+    if(!PS_DEVICE_VIEW_PLAIN_ROWS)gridRule(out,s,w,groupWidth,labelWidth,total&&(logical[start]&0xe000)?"\xe2\x94\xb4":"\xe2\x94\xbc","\xe2\x94\x9c","\xe2\x94\xa4");
     for(unsigned i=0;i<visible;++i){
         const unsigned line=start+i,at=line<total?(logical[line]&0x1fff):count;
         const bool group=line<total&&(logical[line]&0x8000);
@@ -397,17 +416,21 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
             for(unsigned j=0;label[j];++j)if(label[j]>='a'&&label[j]<='z')label[j]=char(label[j]-'a'+'A');
             edge(out,s,"\xe2\x94\x82","|");
             if(ansi_)out.raw(PS_STYLE_THEMES?ps_style_surface(theme_,trueColor_,selected?1:0):selected?"\x1b[7m":"\x1b[1m");
-            out.raw(" ");out.raw(s.unicode?(sectionClosed(at)?"\xe2\x96\xb8 ":"\xe2\x96\xbe "):(sectionClosed(at)?"+ ":"- "));
+            out.raw(" ");out.raw(!sectionsCollapsible_||sectionIndicators_==2?"  ":s.unicode&&sectionIndicators_==0?(sectionClosed(at)?"\xe2\x96\xb8 ":"\xe2\x96\xbe "):(sectionClosed(at)?"+ ":"- "));
             out.field(label,w-6);out.raw(" ");edge(out,s,"\xe2\x94\x82","|");out.raw("\r\n");continue;
         }
         edge(out,s,"\xe2\x94\x82 ","| ");
         if(category)cell(r&&(i==0||!ps_text_equal(r->category,s.rows[at-1].category))?r->category:"",groupWidth);
         if(selected&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,2));
-        ink(out,selected&&theme_!=Semantic?1:4);
-        char markerText[241];const unsigned marker=unsigned(terminalText(markerText,sizeof markerText,selectionMarker_));
+        ink(out,selected&&theme_!=Default?1:4);
+        bool categories=false;
+        if(sections())for(unsigned j=0;j<count;++j)if(s.rows[j].category&&*s.rows[j].category){categories=true;break;}
+        const char *mark=ps_table_marker(selectionMarker_,s.unicode,categories,sectionsCollapsible_,s.unicode&&sectionIndicators_==0);
+        char markerText[241];const unsigned marker=selectionMarker_?unsigned(terminalText(markerText,sizeof markerText,mark)):(*mark?2:0);
         const unsigned markerWidth=marker<labelWidth?marker:labelWidth;
-        out.field(selected?markerText:"",markerWidth);
-        out.field(r?r->label:"",labelWidth-markerWidth);edge(out,s," \xe2\x94\x82 "," | ");
+        if(!selectionMarker_&&selected&&markerWidth==2)out.raw(mark);
+        else out.field(selected&&selectionMarker_?markerText:"",markerWidth);
+        out.field(r?r->label:"",labelWidth-markerWidth);if(PS_DEVICE_VIEW_PLAIN_ROWS)out.raw("   ");else edge(out,s," \xe2\x94\x82 "," | ");
         if(PS_DEVICE_VIEW_INLINE_EDIT&&selected&&editing_&&(!dialog_||!ansi_)){editValue(out,valueWidth);editRow_=body+i;editColumn_=offset+labelWidth+6+(category?groupWidth+3:0);editWidth_=valueWidth;}
         else if(r)value(out,s,*r,valueWidth);else out.field("",valueWidth);
         edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
@@ -415,9 +438,9 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     paintedSelection_=selected_;paintedGrid_=grid_;
     if(ansi_){
         if(paintAll)blankRows(out,s,body+visible,s.lines-4-diagnostics,w,groupWidth,labelWidth);
-        if(gutter){base(out);for(unsigned i=0;i<s.lines-9-shift-diagnostics;++i){out.position(body+i,w+1);out.field("",gutter);}}
+        if(gutter){base(out);for(unsigned i=0;i<s.lines-9-shift-diagnostics+(PS_DEVICE_VIEW_PLAIN_ROWS?2:0);++i){out.position(body+i,w+1);out.field("",gutter);}}
         if(total>visible){
-            const unsigned height=s.lines-9-shift-diagnostics;
+            const unsigned height=s.lines-9-shift-diagnostics+(PS_DEVICE_VIEW_PLAIN_ROWS?2:0);
             const unsigned thumb=height*visible/total?height*visible/total:1;
             const unsigned top=start*(height-thumb)/(total-visible);
             base(out);int previous=-1;
@@ -440,7 +463,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     char status[64];
     if(sectionFocus_)ps_terminal_format(status,sizeof(status),"Section %s",sectionClosed(selected_)?"collapsed":"expanded");
     else ps_terminal_format(status,sizeof(status),"%u / %u",count?selected_+1:0,count);
-    ink(out,theme_==Semantic?PS_INK_NUMBER:1);out.raw(status);out.raw("  ");ink(out,0);
+    ink(out,theme_==Default?PS_INK_NUMBER:1);out.raw(status);out.raw("  ");ink(out,0);
     const char *context=*notice_?notice_:r&&r->pending?"Waiting for readback":r&&!r->editable?"Read only":"";
     out.safe(context,width-1-unsigned(ps_text_length(status))-2);out.raw("\r\n");footer(out,s,width-1);
     if(PS_DEVICE_VIEW_DIALOGS&&dialog_&&editing_&&ansi_){

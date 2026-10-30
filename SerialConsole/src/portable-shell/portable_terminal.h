@@ -1,5 +1,6 @@
 #ifndef PORTABLE_TERMINAL_H
 #define PORTABLE_TERMINAL_H
+#include "portable_util.h"
 /* MIT, Copyright (c) 2026 AtomicDeploy and PortableShell contributors.
  * Shared byte-only terminal primitives. Source lineage is recorded in the
  * repository integration documents and donor inventory.
@@ -267,7 +268,7 @@ static inline int ps_history_safe(const char *text, size_t maximum) {
             return 0;
         if (c != ' ')
             nonspace = 1;
-        for (j = 0; j < sizeof(forbidden) / sizeof(*forbidden); ++j) {
+        for (j = 0; j < PS_COUNT_OF(forbidden); ++j) {
             for (k = 0; forbidden[j][k] && i + k < maximum && text[i + k]; ++k)
                 if (ps_ascii_fold((unsigned char)text[i + k]) != (unsigned char)forbidden[j][k])
                     break;
@@ -297,14 +298,14 @@ static inline int ps_tn_slot(unsigned option) {
 static inline void ps_tn_command(ps_terminal_write write, void *context, unsigned verb,
                                  unsigned option) {
     unsigned char b[3] = {255, (unsigned char)verb, (unsigned char)option};
-    write(context, b, 3);
+    write(context, b, sizeof b);
 }
 static inline void ps_telnet_init(ps_telnet *s, unsigned flags, unsigned columns, unsigned rows) {
     ps_secure_clear(s, sizeof(*s));
     s->flags = (unsigned char)flags;
     s->columns = columns ? columns : 80;
     s->rows = rows ? rows : 24;
-    ps_bytes_copy(s->terminal, "unknown", 8);
+    ps_bytes_copy(s->terminal, "unknown", sizeof "unknown");
 }
 static inline int ps_telnet_ansi(const ps_telnet *s) {
     return !(ps_text_length(s->terminal) == 4 && ps_text_prefix(s->terminal, "dumb", 4));
