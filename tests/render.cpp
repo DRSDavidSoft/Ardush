@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
     if (argc != 5) return 2;
     portable_console s; portable_console_port port = {write_bytes, get_led, set_led, nullptr};
     ps_replay_reset(); portable_console_init(&s, port, nullptr, 0, 1); portable_console_ui.begin(&s);
+    s.probe.column=96;s.probe.row=24;portable_console_ui.render(&s);
     if (save(argv[1])) return 3;
     feed(&s, "\r\025on"); if (save(argv[2])) return 4;
     feed(&s, "\033"); portable_console_tick(&s, 35); portable_console_view_tick(&s);

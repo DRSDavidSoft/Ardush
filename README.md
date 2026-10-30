@@ -27,9 +27,38 @@ checked frames: [inline draft](previews/edit.png), [transport](previews/transpor
 columns, contextual footer, tabs and an alternate screen come from the shared
 renderer. The documented Uno command explicitly omits the view for its 2 KB SRAM budget. Architecture alone never removes UI features.
 
-The previews were regenerated from the current pinned renderer on 2026-10-30.
-Both table layouts now close the tab row at both edges; the retained layout also
-measures clipped titles consistently so the top-right corner stays aligned.
+Interactive tables fill the available viewport, with contextual navigation at
+the window bottom. The consumer fixture reports 96×24 to match the replay terminal;
+live dimensions come from the terminal probe. Plain output remains sequential.
+
+`view` keeps horizontal tabs. `view vertical` opts into a page sidebar;
+`view horizontal` selects the default explicitly. Tab / Shift+Tab change pages,
+while arrows operate table rows or matrix cells. Narrow terminals (under 64
+columns), plain output and the retained layout use horizontal navigation.
+Embedders call `DeviceView::setTabLayout(DeviceView::VerticalTabs)` directly.
+
+### Full, reduced and prompt-only builds
+
+There is no automatic MCU mode. The default shared renderer includes typed
+controls, section headings, inline edits, F2 dialogs, palettes and dedicated
+matrix navigation. The serial example's small list of settings reflects its
+actual capabilities, not a simplified renderer. Larger MCUs can retain the full
+view; applications choose feature/capacity flags to fit their own memory budget.
+
+| Replay build | Explicit selection | Picture |
+| --- | --- | --- |
+| Full device view | All default shared view features | [Horizontal](previews/full.png) |
+| Full with sidebar | Same flags, runtime `VerticalTabs` | [Vertical](previews/vertical.png), [inline edit](previews/vertical-edit.png), [matrix](previews/matrix.png) |
+| Reduced retained view | `PS_DEVICE_VIEW_TABLE=0`, `PS_DEVICE_VIEW_WIDGETS=0`, `PS_DEVICE_VIEW_DIALOGS=0`, `PS_DEVICE_VIEW_MATRIX=0`, `PS_STYLE_THEMES=0`, `PS_DEVICE_VIEW_VERTICAL_TABS=0` | [Reduced](previews/reduced.png) |
+| Prompt only | `PS_CONSOLE_ENABLE_DEVICE_VIEW=0`, as in the documented Uno build | [Prompt](previews/prompt.png) |
+
+The full and reduced pictures use the same simulated settings in
+`tests/render_profiles.cpp`. The reduced view retains text editing and page
+navigation but omits rich controls, section headings, meters, dialogs, themes
+and the sidebar. The prompt-only build retains commands, history, completion
+and keyboard editing; it has no table. This small console does not include the
+full shell's tasks/jobs/variables workbench. Rendering a fixture does not prove
+firmware fit or physical hardware behavior.
 
 ### Rebuild or check README images
 
@@ -40,7 +69,7 @@ cmake -DMODE=UPDATE -P tools/rebuild-previews.cmake
 cmake -P tools/rebuild-previews.cmake
 ```
 
-`UPDATE` rebuilds all four SVG/PNG pairs; commit the resulting `previews/` changes.
+`UPDATE` rebuilds all ten SVG/PNG pairs; commit the resulting `previews/` changes.
 The default `CHECK` mode leaves committed files untouched and fails for missing,
 stale or unmanaged images. CMake builds also expose `previews_update` and
 `previews_check` targets. Use `-DGENERATOR=Ninja` when selecting a generator for
