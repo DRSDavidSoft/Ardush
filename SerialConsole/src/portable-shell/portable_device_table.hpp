@@ -116,9 +116,10 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
 
 // Exactly one context owns hints. Editing suppresses page/grid navigation.
 template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const {
+    if(ansi_){out.indent(0);out.position(s.lines-1);out.raw("\x1b[J");}
     base(out);ink(out,0);
     if(editing_&&dialog_&&ansi_)return; // The modal owns its only Apply/Cancel hint.
-    if(editing_){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 cursor  Enter apply  Esc cancel":"Left/Right cursor Enter apply Esc cancel");out.raw("\r\n");return;}
+    if(editing_){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 cursor  Enter apply  Esc cancel":w<60?"Left/Right move Enter apply Esc cancel":"Left/Right cursor Enter apply Esc cancel");out.raw("\r\n");return;}
     const Row *r=currentRow(s);
     if(grid_&&page_==Led){
         out.raw(s.unicode?"\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 move":"Up/Down Left/Right");
@@ -134,7 +135,49 @@ template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const
     }
     out.raw("\r\n");
     if(page_==Led||page_==Pixel||page_==Game)out.raw(grid_?"F settings  ":page_==Led?"F matrix  ":page_==Game?"F game  ":"F pixels  ");
-    out.raw("Tab pages  Esc close\r\n");
+    out.raw(w>=70?"Tab pages  Shift+Tab previous  Esc close":"Tab pages  Esc close");
+    if(ansi_)out.raw("\x1b[K");else out.raw("\r\n");
+}
+
+// Blank viewport cells are painted with cursor movement, not a frame buffer.
+template<class W> void blankRows(Writer<W> &out,const Snapshot &s,unsigned first,unsigned last,
+                                 unsigned w,unsigned group=0,unsigned label=0) const {
+    if(!ansi_)return;
+    base(out);ink(out,7);
+    if(!PS_DEVICE_VIEW_TABLE)out.raw("\x1b[31m");
+    for(unsigned row=first;row<=last;++row){
+        out.position(row);out.raw("\x1b[K");
+        out.raw(s.unicode?"\xe2\x94\x82":"|");
+        if(group){out.position(row,group+4);out.raw(s.unicode?"\xe2\x94\x82":"|");}
+        if(label){out.position(row,label+4+(group?group+3:0));out.raw(s.unicode?"\xe2\x94\x82":"|");}
+        out.position(row,w);out.raw(s.unicode?"\xe2\x94\x82":"|");
+    }
+    base(out);
+}
+
+template<class W> void sidebar(Writer<W> &out,const Snapshot &s,unsigned height) const {
+    out.position(1);rule(out,s,20,"\xe2\x95\xad","\xe2\x95\xae",false);
+    unsigned page=0;
+    for(unsigned row=2;row<height;++row){
+        if(row>2&&page==PageCount){
+            ink(out,7);out.position(row);out.raw(s.unicode?"\xe2\x94\x82":"|");
+            out.field("",18);
+            out.position(row,20);out.raw(s.unicode?"\xe2\x94\x82":"|");continue;
+        }
+        out.position(row);edge(out,s,"\xe2\x94\x82 ","| ");
+        if(row==2){ink(out,0);out.field("Pages",16);}
+        else {
+            while(page<PageCount&&!pageAvailable(page,s))++page;
+            if(page<PageCount){
+                const bool active=page==page_;
+                if(active&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
+                out.raw(active?"[":" ");out.raw(pageName(page));out.raw(active?"]":" ");base(out);
+                out.field("",14-unsigned(ps_text_length(pageName(page))));++page;
+            }else out.field("",16);
+        }
+        edge(out,s," \xe2\x94\x82"," |");
+    }
+    out.position(height);rule(out,s,20,"\xe2\x95\xb0","\xe2\x95\xaf",false);
 }
 
 static const char *cellName(const Snapshot &s,unsigned state){
@@ -181,15 +224,17 @@ template<class W> void matrix(Writer<W> &out,const Snapshot &s,unsigned w){
         }
         out.field("",w-6-visibleX*tile);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     }
+    if(ansi_){blankRows(out,s,5+visibleY,s.lines-4,w);out.position(s.lines-3);}
     rule(out,s,w,"\xe2\x95\xb0","\xe2\x95\xaf");
+    if(ansi_){out.indent(0);out.position(s.lines-2);}
     const unsigned state=s.cellStates?s.cellStates[cell_-1]:255;char status[128];
     ps_terminal_format(status,sizeof(status),"Cell %02u  %s",cell_,cellName(s,state));ink(out,4);out.safe(status,w>=60?24:w);
     if(w>=60){const uint32_t rgb=cellRgb(s,cell_);char hex[8]={'#',0};const char *digits="0123456789ABCDEF";
         for(unsigned i=0;i<6;++i)hex[i+1]=digits[(rgb>>(20-4*i))&15];
         if(state<4){out.raw("  ");out.raw(hex);}ink(out,0);out.raw("  ");
         out.safe(*notice_?notice_:"Configured state colors",w-35);}
-    else if(*notice_){out.raw("\r\n");out.safe(notice_,w);}
-    out.raw("\r\n");footer(out,s,w);if(ansi_)out.raw("\x1b[J");
+    else if(*notice_){const unsigned n=unsigned(ps_text_length(status));if(n+2<w){out.raw("  ");out.safe(notice_,w-n-2);}}
+    out.raw("\r\n");footer(out,s,s.columns-1);
 }
 template<class Write> bool renderTable(const Snapshot &s,Write write) {
     Writer<Write> out(write,ansi_);
@@ -199,20 +244,23 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     full_=false;
     if(width<40||s.lines<16){out.raw(s.unicode?"Resize terminal to 40 \xc3\x97 16\r\n":"Resize terminal to 40 x 16\r\n");return true;}
     // Leave the physical terminal's last column free to avoid delayed autowrap.
-    const unsigned w=width-1;
+    const unsigned offset=PS_DEVICE_VIEW_VERTICAL_TABS&&tabs_==VerticalTabs&&ansi_&&width>=64?22:0;
+    const unsigned w=width-1-offset;
+    if(offset){sidebar(out,s,s.lines-3);out.indent(offset);out.position(1);}
     base(out);ink(out,7);out.raw(s.unicode?"\xe2\x95\xad\xe2\x94\x80 ":"+- ");
     ink(out,4);char title[241];const unsigned titleSize=unsigned(terminalText(title,w-8,s.title));out.raw(title);
     ink(out,7);out.raw(" ");for(unsigned i=titleSize+4;i<w-1;++i)out.raw(s.unicode?"\xe2\x94\x80":"-");out.raw(s.unicode?"\xe2\x95\xae":"+");base(out);out.raw("\r\n");
     edge(out,s,"\xe2\x94\x82 ","| ");
     unsigned used=0,tabTotal=0;for(unsigned i=0;i<PageCount;++i)if(pageAvailable(i,s))tabTotal+=unsigned(ps_text_length(pageName(i)))+3;
+    if(offset){ink(out,4);out.raw(pageName(page_));used=unsigned(ps_text_length(pageName(page_)));}
     for(unsigned i=0;i<PageCount;++i){
-        if(!pageAvailable(i,s)||(tabTotal>w-4&&i!=page_))continue;
+        if(offset||!pageAvailable(i,s)||(tabTotal>w-4&&i!=page_))continue;
         if(i==page_&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
         out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"]":" ");base(out);
         out.raw(" "); // Inter-tab spacing is outside the selected surface.
         used+=unsigned(ps_text_length(pageName(i)))+3;
     }
-    if(tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u",unsigned(page_)+1,unsigned(PageCount));
+    if(!offset&&tabTotal>w-4){char hint[40];ps_terminal_format(hint,sizeof(hint),"  %u/%u",unsigned(page_)+1,unsigned(PageCount));
         const unsigned n=unsigned(ps_text_length(hint));if(used+n<w-4){ink(out,0);out.raw(hint);used+=n;}}
     out.field("",w-4-used);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     if(PS_DEVICE_VIEW_MATRIX&&page_==Led&&grid_&&s.canLeds){matrix(out,s,w);return true;}
@@ -226,10 +274,11 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     gridRule(out,s,w,groupWidth,labelWidth,"\xe2\x94\xbc","\xe2\x94\x9c","\xe2\x94\xa4");
     const unsigned count=rowCount(s);if(selected_>=count)selected_=count?uint8_t(count-1):0;
     const unsigned diagnostics=page_==Led&&!PS_DEVICE_VIEW_MATRIX?(s.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
-    unsigned visible=s.lines>11+diagnostics?s.lines-11-diagnostics:1;
+    unsigned visible=s.lines>9+diagnostics?s.lines-9-diagnostics:1;
     if(visible>PS_DEVICE_VIEW_MAX_ROWS)visible=PS_DEVICE_VIEW_MAX_ROWS;
     // Bound complete frames rather than silently dropping their final border.
-    const unsigned budgetRows=(PS_DEVICE_VIEW_FRAME_BYTES > 8192 ? PS_DEVICE_VIEW_FRAME_BYTES-8192 : 1)/(w+1000U);
+    const unsigned reserve=8192U+unsigned(s.lines)*110U;
+    const unsigned budgetRows=(PS_DEVICE_VIEW_FRAME_BYTES > reserve ? PS_DEVICE_VIEW_FRAME_BYTES-reserve : 1)/(w+450U);
     if(visible>budgetRows)visible=budgetRows?budgetRows:1;
     // PCController's logical-row/section-line separation, without heap storage.
     uint8_t logical[PS_DEVICE_VIEW_MAX_ROWS*2];bool section[PS_DEVICE_VIEW_MAX_ROWS*2];
@@ -251,30 +300,33 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
         const bool selectionChanged=(selected_!=paintedSelection_)&&(at==selected_||at==paintedSelection_);
         if(!paintAll&&painted_[i]==stamp&&!selectionChanged&&paintedGrid_==grid_)continue;
         painted_[i]=stamp;
-        if(ansi_){char pos[24];ps_terminal_format(pos,sizeof(pos),"\x1b[%u;1H",6+i);out.raw(pos);}
+        out.position(6+i);
         edge(out,s,"\xe2\x94\x82 ","| ");
         if(group){ink(out,6);out.raw(s.unicode?"\xe2\x94\x80 ":"- ");out.field(r->category,w-6);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");continue;}
         if(category)cell(r&&(i==0||!ps_text_equal(r->category,s.rows[at-1].category))?r->category:"",groupWidth);
         if(selected&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,2));
         ink(out,selected?1:4);out.raw(selected?(s.unicode?"\xe2\x96\xb8 ":"> "):"  ");
         out.field(r?r->label:"",labelWidth-2);edge(out,s," \xe2\x94\x82 "," | ");
-        if(selected&&editing_&&(!dialog_||!ansi_)){editValue(out,valueWidth);editRow_=6+i;editColumn_=labelWidth+6+(category?groupWidth+3:0);editWidth_=valueWidth;}
+        if(selected&&editing_&&(!dialog_||!ansi_)){editValue(out,valueWidth);editRow_=6+i;editColumn_=offset+labelWidth+6+(category?groupWidth+3:0);editWidth_=valueWidth;}
         else if(r)value(out,s,*r,valueWidth);else out.field("",valueWidth);
         edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     }
     paintedSelection_=selected_;paintedGrid_=grid_;
-    if(ansi_){char pos[24];ps_terminal_format(pos,sizeof(pos),"\x1b[%u;1H",6+visible);out.raw(pos);}
+    if(ansi_){
+        if(paintAll)blankRows(out,s,6+visible,s.lines-4-diagnostics,w,groupWidth,labelWidth);
+        out.position(s.lines-3-diagnostics);
+    }
     gridRule(out,s,w,groupWidth,labelWidth,"\xe2\x94\xb4","\xe2\x95\xb0","\xe2\x95\xaf");
     if(pageAvailable(page_,s)&&!(PS_DEVICE_VIEW_MATRIX&&page_==Led))renderDiagnostics(out,s,w);
+    if(ansi_){out.indent(0);out.position(s.lines-2);}
     base(out);ink(out,0);
     const Row *r=currentRow(s);
     char status[64];ps_terminal_format(status,sizeof(status),"%u / %u",count?selected_+1:0,count);
     ink(out,1);out.raw(status);out.raw("  ");ink(out,0);
     const char *context=*notice_?notice_:r&&r->pending?"Waiting for readback":r&&!r->editable?"Read only":"";
-    out.safe(context,w-unsigned(ps_text_length(status))-2);out.raw("\r\n");footer(out,s,w);
-    if(ansi_)out.raw("\x1b[J");
+    out.safe(context,width-1-unsigned(ps_text_length(status))-2);out.raw("\r\n");footer(out,s,width-1);
     if(PS_DEVICE_VIEW_DIALOGS&&dialog_&&editing_&&ansi_){
-        const unsigned dw=w<74?w-4:70,left=(w-dw)/2+1,top=s.lines/2-3;
+        const unsigned dw=w<74?w-4:70,left=offset+(w-dw)/2+1,top=s.lines/2-3;
         auto position=[&](unsigned row){char b[24];ps_terminal_format(b,sizeof(b),"\x1b[%u;%uH",row,left);out.raw(b);};
         position(top);rule(out,s,dw,"\xe2\x95\xad","\xe2\x95\xae",false);
         position(top+1);edge(out,s,"\xe2\x94\x82 ","| ");ink(out,4);out.field(editLabel_,dw-4);edge(out,s," \xe2\x94\x82"," |");

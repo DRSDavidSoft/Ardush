@@ -36,7 +36,14 @@ int main() {
     feed(&s, "\r\025off\r"); assert(!s.editor.upper && writes == 1);
     feed(&s, "\033"); portable_console_tick(&s, 70); portable_console_view_tick(&s);
     assert(s.mode == PS_CONSOLE_PROMPT && out.find("\033[?1049l") != std::string::npos);
+    out.clear();feed(&s,"view vertical\r");
+    assert(s.mode==PS_CONSOLE_VIEW&&writes==1);
+    assert(portable_console_ui.view.tabLayout()==PortableShell::DeviceView::VerticalTabs);
+    feed(&s,"\033");portable_console_tick(&s,105);portable_console_view_tick(&s);
+    out.clear();feed(&s,"view invalid\r");assert(s.mode==PS_CONSOLE_PROMPT);
+    assert(out.find("view [horizontal|vertical]")!=std::string::npos);
     feed(&s, "plain\r"); out.clear(); feed(&s, "view\r");
+    assert(portable_console_ui.view.tabLayout()==PortableShell::DeviceView::HorizontalTabs);
     assert(out.find('\033') == std::string::npos);
     out.clear(); feed(&s, "\r\025off");
     assert(out.find('\033') == std::string::npos);

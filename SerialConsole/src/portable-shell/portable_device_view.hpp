@@ -26,6 +26,9 @@
 #ifndef PS_DEVICE_VIEW_CATEGORY_COLUMN
 #define PS_DEVICE_VIEW_CATEGORY_COLUMN 0
 #endif
+#ifndef PS_DEVICE_VIEW_VERTICAL_TABS
+#define PS_DEVICE_VIEW_VERTICAL_TABS 1
+#endif
 #ifndef PS_DEVICE_VIEW_MAX_ROWS
 #define PS_DEVICE_VIEW_MAX_ROWS 64
 #endif
@@ -46,6 +49,7 @@ namespace PortableShell {
 class DeviceView {
   public:
     enum Theme : uint8_t { Violet, Red, Lumen, OneDark };
+    enum TabLayout : uint8_t { HorizontalTabs, VerticalTabs };
     enum Kind : uint8_t { Text, Toggle, Level, Choice };
     enum Page : uint8_t {
         Device,
@@ -171,6 +175,10 @@ class DeviceView {
     }
     void setTheme(Theme theme) { if (theme <= OneDark && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
     Theme theme() const { return theme_; }
+    void setTabLayout(TabLayout layout) {
+        if (layout <= VerticalTabs && tabs_ != layout) { tabs_=layout;dirty_=full_=true; }
+    }
+    TabLayout tabLayout() const { return tabs_; }
     void setTrueColor(bool enabled) { if (trueColor_!=enabled) {trueColor_=enabled;dirty_=full_=true;} }
     bool trueColor() const { return trueColor_; }
     void feedback(const char *text) {
@@ -516,6 +524,11 @@ class DeviceView {
                     out.raw("\x1b[0m");
                 out.raw("\r\n");
             }
+            if(ansi_){
+                const unsigned diagnostics=page_==Led?(snapshot.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
+                blankRows(out,snapshot,4+visible,snapshot.lines-4-diagnostics,unsigned(width)-1);
+                out.position(snapshot.lines-3-diagnostics);
+            }
             if (ansi_)
                 out.raw("\x1b[31m");
             out.raw(snapshot.unicode ? "\xe2\x95\xb0" : "+");
@@ -527,6 +540,7 @@ class DeviceView {
             out.raw("\r\n");
             renderDiagnostics(out,snapshot,unsigned(width));
         }
+        if(ansi_)out.position(snapshot.lines-1);
         if (ansi_)
             out.raw("\x1b[90m");
         if (editing_)
@@ -540,7 +554,7 @@ class DeviceView {
         if (ansi_)
             out.raw("\x1b[0m");
         out.safe(notice_, width - 1);
-        out.raw("\r\n");
+        if(!ansi_)out.raw("\r\n");
         if (PS_DEVICE_VIEW_INLINE_EDIT) {
             if (ansi_) {
                 out.raw("\x1b[J");
@@ -566,6 +580,10 @@ class DeviceView {
     template <typename Write> class Writer {
       public:
         explicit Writer(Write write, bool ansi = false) : write_(write), ansi_(ansi) {}
+        void indent(unsigned column) { indent_=column; }
+        void position(unsigned row, unsigned column=1) {
+            if(ansi_){char b[32];ps_terminal_format(b,sizeof(b),"\x1b[%u;%uH",row,column+indent_);raw(b);}
+        }
         void raw(const char *text) {
             while (*text) {
                 const char *end = ansi_ ? ps_text_find(text, "\r\n") : nullptr;
@@ -578,6 +596,7 @@ class DeviceView {
                     return;
                 write_(reinterpret_cast<const uint8_t *>("\x1b[K\r\n"), 5);
                 remaining_ -= 5;
+                if(indent_){char b[24];ps_terminal_format(b,sizeof(b),"\x1b[%uG",indent_+1);raw(b);}
                 text = end + 2;
             }
         }
@@ -599,6 +618,7 @@ class DeviceView {
         Write write_;
         size_t remaining_ = PS_DEVICE_VIEW_TABLE ? PS_DEVICE_VIEW_FRAME_BYTES : 4096;
         bool ansi_;
+        unsigned indent_ = 0;
     };
     static void scrub(char *p, size_t n) {
         volatile char *out = p;
@@ -1038,6 +1058,7 @@ class DeviceView {
     Page page_ = Device;
 #include "portable_device_table.hpp"
     Theme theme_ = Violet;
+    TabLayout tabs_ = HorizontalTabs;
     bool trueColor_ = true, dialog_ = false;
     unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;
     uint32_t observed_ = 0;

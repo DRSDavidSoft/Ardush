@@ -29,6 +29,9 @@ struct ConsoleView {
             rows[0] = {"LED", "led", led < 0 ? "unknown" : led ? "on" : "off", led >= 0 && s->port.led_set};
             rows[1] = {"Uppercase echo", "upper", s->editor.upper ? "on" : "off", true}; snap.rowCount = 2;
         }
+        for(unsigned i=0;i<snap.rowCount;++i)
+            if(portable_console_equal(rows[i].key,"led")||portable_console_equal(rows[i].key,"upper")||portable_console_equal(rows[i].key,"ansi"))
+                rows[i].kind=PortableShell::DeviceView::Toggle;
         snap.rows = rows;
     }
     void render(portable_console *s) {
@@ -77,7 +80,14 @@ struct ConsoleView {
     }
 };
 static ConsoleView portable_console_ui;
-static inline void portable_console_view_begin(portable_console *s, unsigned, char *const *) { portable_console_ui.begin(s); }
+static inline void portable_console_view_begin(portable_console *s, unsigned argc, char *const *argv) {
+    using View=PortableShell::DeviceView;
+    if(argc>2||(argc==2&&!portable_console_equal(argv[1],"vertical")&&!portable_console_equal(argv[1],"horizontal"))){
+        portable_console_put(s,"view [horizontal|vertical]\r\n");return;
+    }
+    portable_console_ui.view.setTabLayout(argc==2&&portable_console_equal(argv[1],"vertical")?View::VerticalTabs:View::HorizontalTabs);
+    portable_console_ui.begin(s);
+}
 static inline void portable_console_view_feed(portable_console *s, unsigned char ch) { portable_console_ui.feed(s, ch); }
 static inline void portable_console_view_tick(portable_console *s) { portable_console_ui.tick(s); }
 #endif

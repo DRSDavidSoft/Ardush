@@ -1,8 +1,8 @@
 # Host-only image tooling. Never linked into the shell or board firmware.
 # Exact source revision plus SHA-256 prevents mutable tags/assets changing images.
-set(replay_revision 4879ee0b5a5b0e0bf171caffab065257354df333)
+set(replay_revision a721d49dae4880aadb6d5f4910659b86731b72fa)
 set(replay_url "https://raw.githubusercontent.com/atomicdeploy/portable-shell/${replay_revision}/tests/render.c")
-set(replay_sha 6d7a6d2988afafc51fb4036b7037876060f7da40677414b9e28276356372fbbb)
+set(replay_sha 8bcf093a39472a0df744cfc8709930d04b98795998886d32a58a65231a7ead63)
 set(font_revision 8c34d424dfeab4aaa39d89204587214d576589a6)
 set(font_url "https://raw.githubusercontent.com/blobject/agave/${font_revision}/dist/Agave-Regular-zeroslashed.ttf")
 set(font_sha 61e3df5bcced13ab46b608201058aeb6ca556f3e52671223fb6a8dce98ddda2c)
