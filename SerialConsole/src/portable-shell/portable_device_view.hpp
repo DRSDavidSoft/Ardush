@@ -204,6 +204,8 @@ class DeviceView {
         if(!editing_ && tabsInsideTable_!=enabled){tabsInsideTable_=enabled;dirty_=full_=true;}
     }
     bool tabsInsideTable() const { return tabsInsideTable_; }
+    void setFooterKeycaps(bool enabled){keycaps_=enabled;dirty_=full_=true;}
+    void setTabBrackets(bool enabled){tabBrackets_=enabled;dirty_=full_=true;}
     void setTrueColor(bool enabled) { if (trueColor_!=enabled) {trueColor_=enabled;dirty_=full_=true;} }
     bool trueColor() const { return trueColor_; }
     void feedback(const char *text) {
@@ -592,12 +594,12 @@ class DeviceView {
         if (ansi_)
             out.raw("\x1b[90m");
         if (editing_)
-            out.raw("Enter save  Esc cancel\r\n");
+            hint(out,"Enter save  Esc cancel\r\n");
         else if (width < 60)
-            out.raw(snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 Tab Enter Esc\r\n"
+            hint(out,snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 Tab Enter Esc\r\n"
                                      : "Up/Down Tab Enter Esc\r\n");
         else
-            out.raw(snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 select  Tab pages  Enter edit  Esc back\r\n"
+            hint(out,snapshot.unicode ? "\xe2\x86\x91/\xe2\x86\x93 select  Tab pages  Enter edit  Esc back\r\n"
                                      : "Up/Down select  Tab pages  Enter edit  Esc back\r\n");
         if (ansi_)
             out.raw("\x1b[0m");
@@ -1194,6 +1196,7 @@ class DeviceView {
     uint8_t closed_[PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?PageCount:1][PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?(PS_DEVICE_VIEW_MAX_ROWS+7)/8:1]{};
     uint32_t sectionSchema_[PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?PageCount:1]{};
     bool trueColor_ = true, dialog_ = false;
+    bool keycaps_=PS_FOOTER_KEYCAPS!=0,tabBrackets_=PS_TAB_BRACKETS!=0;
     unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;
     uint32_t observed_ = 0;
     uint32_t painted_[PS_DEVICE_VIEW_TABLE ? PS_DEVICE_VIEW_MAX_ROWS : 1]{};
