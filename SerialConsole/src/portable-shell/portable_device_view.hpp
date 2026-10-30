@@ -616,7 +616,8 @@ class DeviceView {
 
       private:
         Write write_;
-        size_t remaining_ = PS_DEVICE_VIEW_TABLE ? PS_DEVICE_VIEW_FRAME_BYTES : 4096;
+        // This limits emitted bytes, not storage. Both layouts can fill a tall viewport.
+        size_t remaining_ = PS_DEVICE_VIEW_FRAME_BYTES;
         bool ansi_;
         unsigned indent_ = 0;
     };
