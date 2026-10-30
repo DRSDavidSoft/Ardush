@@ -19,7 +19,7 @@
 #define PS_EDITOR_SUGGEST_BYTES 80
 #endif
 #ifndef PS_EDITOR_PROMPT_STYLE
-#define PS_EDITOR_PROMPT_STYLE "\x1b[1;35m"
+#define PS_EDITOR_PROMPT_STYLE "\x1b[36m"
 #endif
 #if PS_EDITOR_PROMPT_BYTES < 6 || PS_EDITOR_SUGGEST_BYTES < 2
 #error "Prompt needs >=6 bytes and suggestion storage >=2"
@@ -92,7 +92,7 @@ static inline void ps_editor_prompt(ps_editor *s, ps_terminal_write write, void 
     if (!s->echo)
         return;
     if (s->ansi)
-        ps_term_emit(write, ctx, s->theme <= 3 ? ps_style_ink(s->theme, s->true_color, 0, 1) : PS_EDITOR_PROMPT_STYLE);
+        ps_term_emit(write, ctx, s->theme <= PS_STYLE_SEMANTIC ? ps_style_ink(s->theme, s->true_color, 0, s->theme==PS_STYLE_SEMANTIC?PS_INK_HEADING:PS_INK_COMMAND) : PS_EDITOR_PROMPT_STYLE);
     ps_term_emit(write, ctx, s->prompt);
     ps_term_emit(write, ctx, "> ");
     if (s->ansi)

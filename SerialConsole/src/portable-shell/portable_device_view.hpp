@@ -51,7 +51,7 @@
 namespace PortableShell {
 class DeviceView {
   public:
-    enum Theme : uint8_t { Violet, Red, Lumen, OneDark };
+    enum Theme : uint8_t { Violet, Red, Lumen, OneDark, Semantic };
     enum TabLayout : uint8_t { HorizontalTabs, VerticalTabs };
     enum GroupLayout : uint8_t { SectionRows, CategoryColumn };
     enum Kind : uint8_t { Text, Toggle, Level, Choice };
@@ -178,7 +178,7 @@ class DeviceView {
             dirty_ = full_ = true;
         }
     }
-    void setTheme(Theme theme) { if (theme <= OneDark && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
+    void setTheme(Theme theme) { if (theme <= Semantic && theme_ != theme) {theme_=theme;dirty_=full_=true;} }
     Theme theme() const { return theme_; }
     void setTabLayout(TabLayout layout) {
         if (layout <= VerticalTabs && tabs_ != layout) { tabs_=layout;dirty_=full_=true; }
@@ -452,7 +452,7 @@ class DeviceView {
             out.raw(snapshot.unicode?"Resize terminal to 40 \xc3\x97 16\r\n":"Resize terminal to 40 x 16\r\n");
             return true;
         }
-        if (ansi_) out.raw("\x1b[31m");
+        if (ansi_) out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
         out.raw(snapshot.unicode ? "\xe2\x94\x82 " : "| ");
         size_t tabUsed = 0;
         for (uint8_t i = 0; i < PageCount; ++i) {
@@ -481,19 +481,19 @@ class DeviceView {
             const size_t tabWidth = ps_text_length(label);
             if (tabWidth > width - 5 - tabUsed) continue;
             if (ansi_)
-                out.raw(i == page_ ? "\x1b[1;35m" : "\x1b[90m");
+                out.raw(i == page_ ? (theme_==Semantic ? "\x1b[7m" : "\x1b[1;35m") : "\x1b[90m");
             out.raw(label);
             tabUsed += tabWidth;
             if (ansi_)
                 out.raw("\x1b[0m");
         }
         out.field("", width - 5 - tabUsed);
-        if (ansi_) out.raw("\x1b[31m");
+        if (ansi_) out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
         out.raw(snapshot.unicode ? " \xe2\x94\x82" : " |");
         if (ansi_) out.raw("\x1b[0m");
         out.raw("\r\n");
         if (ansi_)
-            out.raw("\x1b[31m");
+            out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
         out.raw(snapshot.unicode ? "\xe2\x94\x9c" : "+");
         for (size_t i = 0; i < width - 3; ++i)
             out.raw(snapshot.unicode ? "\xe2\x94\x80" : "-");
@@ -518,13 +518,13 @@ class DeviceView {
             for (uint8_t i = 0; i < visible; ++i) {
                 const uint8_t at = start + i;
                 if (ansi_)
-                    out.raw("\x1b[31m");
+                    out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
                 out.raw(snapshot.unicode ? "\xe2\x94\x82 " : "| ");
                 if (at < count) {
                     const Row &row = snapshot.rows[at];
                     const bool selected = at == selected_ && !grid_;
                     if (ansi_) {
-                        out.raw(selected ? "\x1b[1;35m" : "\x1b[0m");
+                        out.raw(selected ? (theme_==Semantic ? "\x1b[7m" : "\x1b[1;35m") : "\x1b[0m");
                     }
                     out.raw(selected ? "> " : "  ");
                     const size_t labelWidth = width < 60 ? 12 : 22;
@@ -533,7 +533,7 @@ class DeviceView {
                         out.raw("\x1b[90m");
                     out.raw(row.editable ? "  " : "- ");
                     if (ansi_)
-                        out.raw(selected ? "\x1b[1;35m" : "\x1b[0m");
+                        out.raw(selected ? (theme_==Semantic ? "\x1b[7m" : "\x1b[1;35m") : "\x1b[0m");
                     if (PS_DEVICE_VIEW_INLINE_EDIT && editing_ && selected)
                         editValue(out, width - labelWidth - 9);
                     else
@@ -543,7 +543,7 @@ class DeviceView {
                 } else
                     out.field("", width - 5);
                 if (ansi_)
-                    out.raw("\x1b[31m");
+                    out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
                 const unsigned thumb=count>visible?(unsigned(visible)*visible/count?unsigned(visible)*visible/count:1):0;
                 const unsigned top=thumb?unsigned(start)*(visible-thumb)/(count-visible):0;
                 const bool scroll=thumb&&i>=top&&i<top+thumb;
@@ -558,7 +558,7 @@ class DeviceView {
                 out.position(snapshot.lines-3-diagnostics);
             }
             if (ansi_)
-                out.raw("\x1b[31m");
+                out.raw(theme_==Semantic ? "\x1b[90m" : "\x1b[31m");
             out.raw(snapshot.unicode ? "\xe2\x95\xb0" : "+");
             for (size_t i = 0; i < width - 3; ++i)
                 out.raw(snapshot.unicode ? "\xe2\x94\x80" : "-");
@@ -1165,7 +1165,7 @@ class DeviceView {
     }
     Page page_ = Device;
 #include "portable_device_table.hpp"
-    Theme theme_ = Violet;
+    Theme theme_ = Semantic;
     TabLayout tabs_ = HorizontalTabs;
     GroupLayout groups_ = PS_DEVICE_VIEW_CATEGORY_COLUMN ? CategoryColumn : SectionRows;
     bool sectionFocus_ = false;

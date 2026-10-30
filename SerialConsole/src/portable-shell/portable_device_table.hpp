@@ -71,7 +71,7 @@ static bool pageAvailable(unsigned p,const Snapshot &s) {
         (p!=Cloud||s.cloudSettings)&&(p!=Notifications||s.notificationSettings)&&(p!=Clock||s.clockSettings);
 }
 template<class W> void base(Writer<W> &out) const {if(ansi_)out.raw(ps_style_base(theme_,trueColor_));}
-template<class W> void ink(Writer<W> &out,unsigned role) const {if(ansi_)out.raw(ps_style_ink(theme_,trueColor_,true,role));}
+template<class W> void ink(Writer<W> &out,unsigned role) const {if(ansi_)out.raw(ps_style_ink(theme_,trueColor_,theme_!=Semantic,role));}
 template<class W> void edge(Writer<W> &out,const Snapshot &s,const char *unicode,const char *ascii) const {
     base(out);ink(out,7);out.raw(s.unicode?unicode:ascii);base(out);
 }
@@ -90,7 +90,7 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
     if(r.secret){ink(out,0);out.field("[hidden]",width);return;}
     if(r.pending){ink(out,2);out.field("Pending readback",width);return;}
     if(PS_DEVICE_VIEW_WIDGETS&&r.kind==Toggle){
-        const int on=toggle(r.value);ink(out,on<0?0:on?5:3);
+        const int on=toggle(r.value);ink(out,on<0?0:on?5:theme_==Semantic?PS_INK_INACTIVE:3);
         if(on<0){out.field("Unknown",width);return;}
         out.raw(s.unicode?(on?"\xe2\x97\x8f ":"\xe2\x97\x8b "):(on?"+ ":"- "));
         out.field(on?r.onLabel:r.offLabel,width-2);return;
@@ -101,15 +101,15 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
         const unsigned bar=10;const uint32_t span=r.maximum-r.minimum,offset=n-r.minimum;
         const uint32_t quantum=span/bar+(span%bar!=0);
         const unsigned filled=n==r.maximum?bar:unsigned(offset/quantum);
-        for(unsigned i=0;i<bar;++i){ink(out,i<filled?1:0);out.raw(s.unicode?(i<filled?"\xe2\x94\x81":"\xe2\x94\x80"):(i<filled?"#":"."));}
-        ink(out,1);out.raw(" ");char text[40];
+        for(unsigned i=0;i<bar;++i){ink(out,i<filled?PS_INK_NUMBER:0);out.raw(s.unicode?(i<filled?"\xe2\x94\x81":"\xe2\x94\x80"):(i<filled?"#":"."));}
+        ink(out,PS_INK_NUMBER);out.raw(" ");char text[40];
         const unsigned percent=levelPercent(n-r.minimum,r.maximum-r.minimum);
         ps_terminal_format(text,sizeof(text),"%u%% (%u/%u)",percent,n,r.maximum);
         out.field(text,width-bar-1);return;
     }
     const char *shown=r.value;
     if(r.kind==Choice&&r.choices&&r.choiceLabels)for(unsigned i=0;i<r.choiceCount;++i)if(ps_text_equal(r.value,r.choices[i])){shown=r.choiceLabels[i];break;}
-    ink(out,r.editable?1:4);
+    ink(out,theme_==Semantic?(r.kind==Level?PS_INK_NUMBER:r.kind==Choice?PS_INK_COMMAND:r.editable?PS_INK_STRING:PS_INK_TEXT):(r.editable?1:4));
     if(r.unit&&*r.unit){char text[241];ps_terminal_format(text,sizeof(text),"%s %s",shown,r.unit);out.field(text,width);}
     else out.field(shown,width);
 }
@@ -145,7 +145,7 @@ template<class W> void blankRows(Writer<W> &out,const Snapshot &s,unsigned first
                                  unsigned w,unsigned group=0,unsigned label=0) const {
     if(!ansi_)return;
     if(PS_DEVICE_VIEW_TABLE){base(out);ink(out,7);}
-    else out.raw("\x1b[0;31m");
+    else out.raw(theme_==Semantic ? "\x1b[0;90m" : "\x1b[0;31m");
     for(unsigned row=first;row<=last;++row){
         out.position(row);out.raw("\x1b[K");
         out.raw(s.unicode?"\xe2\x94\x82":"|");
@@ -272,9 +272,9 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     const unsigned groupWidth=category?16:0,labelWidth=w<59?12:w<95?24:28;
     const unsigned valueWidth=w-7-labelWidth-(category?groupWidth+3:0);
     gridRule(out,s,w,groupWidth,labelWidth,"┬",shift?"╭":"├",shift?"╮":"┤");
-    auto cell=[&](const char *text,unsigned n){ink(out,0);out.field(text,n);edge(out,s," \xe2\x94\x82 "," | ");};
+    auto cell=[&](const char *text,unsigned n){ink(out,theme_==Semantic?PS_INK_HEADING:0);out.field(text,n);edge(out,s," \xe2\x94\x82 "," | ");};
     edge(out,s,"\xe2\x94\x82 ","| ");if(category)cell("Category",groupWidth);cell("Setting",labelWidth);
-    ink(out,0);out.field("Value",valueWidth);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
+    ink(out,theme_==Semantic?PS_INK_HEADING:0);out.field("Value",valueWidth);edge(out,s," \xe2\x94\x82"," |");out.raw("\r\n");
     const unsigned count=rowCount(s);if(selected_>=count)selected_=count?uint8_t(count-1):0;
     const unsigned diagnostics=page_==Led&&!PS_DEVICE_VIEW_MATRIX?(s.lines<24?5:9):page_==Game?3:page_==Pixel?2:0;
     unsigned visible=s.lines>9+shift+diagnostics?s.lines-9-shift-diagnostics:1;
@@ -317,7 +317,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
         edge(out,s,"\xe2\x94\x82 ","| ");
         if(category)cell(r&&(i==0||!ps_text_equal(r->category,s.rows[at-1].category))?r->category:"",groupWidth);
         if(selected&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,2));
-        ink(out,selected?1:4);out.raw(selected?(s.unicode?"\xe2\x96\xb8 ":"> "):"  ");
+        ink(out,selected&&theme_!=Semantic?1:4);out.raw(selected?(s.unicode?"\xe2\x96\xb8 ":"> "):"  ");
         out.field(r?r->label:"",labelWidth-2);edge(out,s," \xe2\x94\x82 "," | ");
         if(selected&&editing_&&(!dialog_||!ansi_)){editValue(out,valueWidth);editRow_=body+i;editColumn_=offset+labelWidth+6+(category?groupWidth+3:0);editWidth_=valueWidth;}
         else if(r)value(out,s,*r,valueWidth);else out.field("",valueWidth);
@@ -350,7 +350,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     char status[64];
     if(sectionFocus_)ps_terminal_format(status,sizeof(status),"Section %s",sectionClosed(selected_)?"collapsed":"expanded");
     else ps_terminal_format(status,sizeof(status),"%u / %u",count?selected_+1:0,count);
-    ink(out,1);out.raw(status);out.raw("  ");ink(out,0);
+    ink(out,theme_==Semantic?PS_INK_NUMBER:1);out.raw(status);out.raw("  ");ink(out,0);
     const char *context=*notice_?notice_:r&&r->pending?"Waiting for readback":r&&!r->editable?"Read only":"";
     out.safe(context,width-1-unsigned(ps_text_length(status))-2);out.raw("\r\n");footer(out,s,width-1);
     if(PS_DEVICE_VIEW_DIALOGS&&dialog_&&editing_&&ansi_){
