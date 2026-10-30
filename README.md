@@ -31,6 +31,14 @@ Interactive tables fill the available viewport, with contextual navigation at
 the window bottom. The consumer fixture reports 96×24 to match the replay terminal;
 live dimensions come from the terminal probe. Plain output remains sequential.
 
+Grouped rows use collapsible uppercase sections with continuous framing; ↑/↓
+selects a heading, Enter/Space toggles it, and ←/→ collapses/expands. Overflow
+shows a proportional scrollbar in the right border. Tabs default above the table.
+Consumers can call `DeviceView::setSectionBorders(false)` for compact headings,
+`setGroupLayout(DeviceView::CategoryColumn)` for category columns, or
+`setTabsInsideTable(true)` for optional first-row tabs. These are the upstream
+implementation and options, exported without a fork of the renderer.
+
 `view` keeps horizontal tabs. `view vertical` opts into a page sidebar;
 `view horizontal` selects the default explicitly. Tab / Shift+Tab change pages,
 while arrows operate table rows or matrix cells. Narrow terminals (under 64

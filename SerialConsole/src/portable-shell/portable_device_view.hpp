@@ -26,6 +26,9 @@
 #ifndef PS_DEVICE_VIEW_CATEGORY_COLUMN
 #define PS_DEVICE_VIEW_CATEGORY_COLUMN 0
 #endif
+#ifndef PS_DEVICE_VIEW_SECTIONS
+#define PS_DEVICE_VIEW_SECTIONS 1
+#endif
 #ifndef PS_DEVICE_VIEW_VERTICAL_TABS
 #define PS_DEVICE_VIEW_VERTICAL_TABS 1
 #endif
@@ -33,7 +36,7 @@
 #define PS_DEVICE_VIEW_MAX_ROWS 64
 #endif
 #ifndef PS_DEVICE_VIEW_FRAME_BYTES
-#define PS_DEVICE_VIEW_FRAME_BYTES 32768
+#define PS_DEVICE_VIEW_FRAME_BYTES (PS_DEVICE_VIEW_TABLE ? 65535UL : 32768UL)
 #endif
 #if PS_DEVICE_VIEW_TABLE && PS_DEVICE_VIEW_FRAME_BYTES < 16384
 #error Rich tables require a frame budget of at least 16384 bytes
@@ -50,6 +53,7 @@ class DeviceView {
   public:
     enum Theme : uint8_t { Violet, Red, Lumen, OneDark };
     enum TabLayout : uint8_t { HorizontalTabs, VerticalTabs };
+    enum GroupLayout : uint8_t { SectionRows, CategoryColumn };
     enum Kind : uint8_t { Text, Toggle, Level, Choice };
     enum Page : uint8_t {
         Device,
@@ -128,6 +132,7 @@ class DeviceView {
         ansi_ = ansi;
         page_ = Device;
         selected_ = 0;
+        sectionFocus_ = false;
         grid_ = false;
         dirty_ = full_ = true;
         lastHash_ = 0;
@@ -179,6 +184,21 @@ class DeviceView {
         if (layout <= VerticalTabs && tabs_ != layout) { tabs_=layout;dirty_=full_=true; }
     }
     TabLayout tabLayout() const { return tabs_; }
+    void setGroupLayout(GroupLayout layout) {
+        if (!editing_ && layout <= CategoryColumn && groups_ != layout) {
+            groups_=layout;sectionFocus_=false;dirty_=full_=true;
+        }
+    }
+    GroupLayout groupLayout() const { return groups_; }
+    bool sectionSelected() const { return sectionFocus_; }
+    void setSectionBorders(bool enabled) {
+        if(!editing_ && sectionBorders_!=enabled){sectionBorders_=enabled;dirty_=full_=true;}
+    }
+    bool sectionBorders() const { return sectionBorders_; }
+    void setTabsInsideTable(bool enabled) {
+        if(!editing_ && tabsInsideTable_!=enabled){tabsInsideTable_=enabled;dirty_=full_=true;}
+    }
+    bool tabsInsideTable() const { return tabsInsideTable_; }
     void setTrueColor(bool enabled) { if (trueColor_!=enabled) {trueColor_=enabled;dirty_=full_=true;} }
     bool trueColor() const { return trueColor_; }
     void feedback(const char *text) {
@@ -207,6 +227,7 @@ class DeviceView {
         action = Action{};
         if (!active_)
             return false;
+        syncSections(snapshot);
         if (crPending_ && (ch == '\n' || ch == 0)) {
             crPending_ = false;
             return false;
@@ -284,6 +305,9 @@ class DeviceView {
             return false;
         if (editing_)
             return edit(ch, snapshot, action);
+        if (sectionFocus_ && sections() && !grid_ && (ch==' ' || ch=='\r' || ch=='\n')) {
+            toggleSection(snapshot,0);crPending_=ch=='\r';return false;
+        }
         if (PS_DEVICE_VIEW_WIDGETS && !grid_ && (ch == ' ' || ch == '+' || ch == '-'))
             return adjust(ch, snapshot, action);
         if (ch == '\t') {
@@ -382,6 +406,7 @@ class DeviceView {
     bool render(const Snapshot &snapshot, Write write, bool force = false) {
         if (!active_)
             return false;
+        syncSections(snapshot);
         if (columns_ != snapshot.columns || lines_ != snapshot.lines) {
             columns_ = snapshot.columns;
             lines_ = snapshot.lines;
@@ -519,7 +544,10 @@ class DeviceView {
                     out.field("", width - 5);
                 if (ansi_)
                     out.raw("\x1b[31m");
-                out.raw(snapshot.unicode ? " \xe2\x94\x82" : " |");
+                const unsigned thumb=count>visible?(unsigned(visible)*visible/count?unsigned(visible)*visible/count:1):0;
+                const unsigned top=thumb?unsigned(start)*(visible-thumb)/(count-visible):0;
+                const bool scroll=thumb&&i>=top&&i<top+thumb;
+                out.raw(snapshot.unicode ? (scroll?" ┃":" │") : (scroll?" #":" |"));
                 if (ansi_)
                     out.raw("\x1b[0m");
                 out.raw("\r\n");
@@ -663,7 +691,67 @@ class DeviceView {
         return s.rows ? (s.rowCount > PS_DEVICE_VIEW_MAX_ROWS ? PS_DEVICE_VIEW_MAX_ROWS : s.rowCount) : 0;
     }
     const Row *currentRow(const Snapshot &s) const {
-        return selected_ < rowCount(s) ? s.rows + selected_ : nullptr;
+        return !sectionFocus_ && selected_ < rowCount(s) ? s.rows + selected_ : nullptr;
+    }
+    bool sections() const { return PS_DEVICE_VIEW_TABLE && PS_DEVICE_VIEW_SECTIONS && groups_==SectionRows; }
+    static bool sectionStart(const Snapshot &s,unsigned i) {
+        return s.rows[i].category && *s.rows[i].category &&
+            (!i || !ps_text_equal(s.rows[i].category,s.rows[i-1].category));
+    }
+    bool sectionClosed(unsigned i) const {
+        return sections() && (closed_[page_][i/8] & (1U<<(i%8)));
+    }
+    void syncSections(const Snapshot &s) {
+        if (!sections()) return;
+        uint32_t signature=2166136261U;
+        const unsigned count=rowCount(s);
+        for(unsigned i=0;i<count;++i){
+            for(unsigned field=0;field<2;++field) {
+                const char *part=field?s.rows[i].category:s.rows[i].key;
+                for(unsigned j=0;part&&part[j]&&j<512;++j){signature^=uint8_t(part[j]);signature*=16777619U;}
+                signature^=255;signature*=16777619U;
+            }
+        }
+        if(sectionSchema_[page_]!=signature){
+            sectionSchema_[page_]=signature;
+            for(unsigned i=0;i<sizeof closed_[0];++i)closed_[page_][i]=0;
+            sectionFocus_=false;dirty_=full_=true;
+        }
+        if(selected_>=count){selected_=count?uint8_t(count-1):0;sectionFocus_=false;}
+        if(count && sectionFocus_ && !sectionStart(s,selected_))sectionFocus_=false;
+        unsigned start=0;bool closed=false;
+        for(unsigned i=0;i<count;++i){
+            if(!i || !ps_text_equal(s.rows[i].category,s.rows[i-1].category)){
+                start=i;closed=sectionStart(s,i)&&sectionClosed(i);
+            }
+            if(i==selected_ && closed){selected_=uint8_t(start);sectionFocus_=true;break;}
+        }
+    }
+    unsigned sectionItems(const Snapshot &s,uint16_t *items,unsigned &focus,bool frame=false) const {
+        unsigned total=0;bool closed=false;focus=0;
+        for(unsigned i=0;i<rowCount(s);++i){
+            if(sections() && (!i || !ps_text_equal(s.rows[i].category,s.rows[i-1].category))){
+                closed=false;
+                if(sectionStart(s,i)){
+                    // Adjacent headings share a rule; the column header frames the first.
+                    if(frame&&sectionBorders_&&total&&!(items[total-1]&0x2000))items[total++]=uint16_t(i|0x4000);
+                    if(selected_==i&&sectionFocus_)focus=total;
+                    items[total++]=uint16_t(i|0x8000);closed=sectionClosed(i);
+                    if(frame&&sectionBorders_)items[total++]=uint16_t(i|0x2000);
+                }
+            }
+            if(!closed){
+                if(selected_==i&&!sectionFocus_)focus=total;
+                items[total++]=uint16_t(i);
+            }
+        }
+        return total;
+    }
+    void toggleSection(const Snapshot &s,int direction) {
+        if(!sections()||!sectionFocus_||selected_>=rowCount(s)||!sectionStart(s,selected_))return;
+        uint8_t &bits=closed_[page_][selected_/8];const unsigned mask=1U<<(selected_%8);
+        if(direction<0)bits|=uint8_t(mask);else if(direction>0)bits&=uint8_t(~mask);else bits^=uint8_t(mask);
+        notice_[0]=0;dirty_=full_=true;
     }
     static bool pixels(const Snapshot &s) {
         if (!PS_DEVICE_VIEW_DIAGNOSTICS || !s.canPixels || !s.pixelCount || s.pixelCount > 480 ||
@@ -722,6 +810,7 @@ class DeviceView {
         }
         selected_ = 0;
         grid_ = page_ == Led || page_ == Pixel || page_ == Game;
+        sectionFocus_ = false;
         dirty_ = full_ = true;
         notice_[0] = 0;
     }
@@ -823,6 +912,23 @@ class DeviceView {
             return pixel_ != old && pixelAction(s, a);
         }
         const uint8_t count = rowCount(s);
+        if(sections() && !grid_){
+            if(sectionFocus_ && (key=='C'||key=='D')){toggleSection(s,key=='C'?1:-1);return false;}
+            if(key=='A'||key=='B'||key=='H'||key=='F'||key=='P'||key=='N'){
+                uint16_t items[PS_DEVICE_VIEW_MAX_ROWS*2];unsigned focus;
+                const unsigned total=sectionItems(s,items,focus);
+                if(total){
+                    if(key=='A')focus=focus?focus-1:0;
+                    else if(key=='B')focus=focus+1<total?focus+1:total-1;
+                    else if(key=='H')focus=0;else if(key=='F')focus=total-1;
+                    else if(key=='P')focus=focus>4?focus-4:0;
+                    else focus=focus+4<total?focus+4:total-1;
+                    selected_=uint8_t(items[focus]&0x7fff);sectionFocus_=(items[focus]&0x8000)!=0;
+                    dirty_=true;
+                }
+                return false;
+            }
+        }
         if (key == 'C' || key == 'D') {
             const Row *row=currentRow(s);
             if(PS_DEVICE_VIEW_WIDGETS&&row&&(row->kind==Level||row->kind==Choice))
@@ -1061,6 +1167,12 @@ class DeviceView {
 #include "portable_device_table.hpp"
     Theme theme_ = Violet;
     TabLayout tabs_ = HorizontalTabs;
+    GroupLayout groups_ = PS_DEVICE_VIEW_CATEGORY_COLUMN ? CategoryColumn : SectionRows;
+    bool sectionFocus_ = false;
+    bool sectionBorders_ = true;
+    bool tabsInsideTable_ = false;
+    uint8_t closed_[PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?PageCount:1][PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?(PS_DEVICE_VIEW_MAX_ROWS+7)/8:1]{};
+    uint32_t sectionSchema_[PS_DEVICE_VIEW_TABLE&&PS_DEVICE_VIEW_SECTIONS?PageCount:1]{};
     bool trueColor_ = true, dialog_ = false;
     unsigned editRow_ = 6, editColumn_ = 30, editWidth_ = 40;
     uint32_t observed_ = 0;
