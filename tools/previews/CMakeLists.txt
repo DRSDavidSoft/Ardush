@@ -8,7 +8,7 @@ add_executable(console_preview "${console_root}/tests/render.cpp" "${REPLAY_SOUR
 add_executable(full_preview "${console_root}/tests/render_profiles.cpp" "${REPLAY_SOURCE}")
 add_executable(reduced_preview "${console_root}/tests/render_profiles.cpp" "${REPLAY_SOURCE}")
 add_executable(prompt_preview "${console_root}/tests/render_prompt.c" "${REPLAY_SOURCE}")
-target_compile_definitions(reduced_preview PRIVATE PS_DEVICE_VIEW_TABLE=0 PS_DEVICE_VIEW_WIDGETS=0
+target_compile_definitions(reduced_preview PRIVATE PS_PREVIEW_REDUCED=1 PS_DEVICE_VIEW_RETAIN_ROWS=0 PS_DEVICE_VIEW_WIDGETS=0
   PS_DEVICE_VIEW_DIALOGS=0 PS_DEVICE_VIEW_MATRIX=0 PS_STYLE_THEMES=0 PS_DEVICE_VIEW_VERTICAL_TABS=0)
 target_compile_definitions(prompt_preview PRIVATE PS_CONSOLE_ENABLE_DEVICE_VIEW=0)
 foreach(target console_preview full_preview reduced_preview prompt_preview)

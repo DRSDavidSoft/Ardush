@@ -1,3 +1,17 @@
+# Unified DeviceView integration — 2026-10-30
+
+The exact canonical revision is recorded in portable-shell.lock. Full and
+reduced builds now share one renderer. The reduced fixture independently omits
+row caching, widgets, dialogs, matrix graphics, palettes and vertical tabs;
+category sections, geometry and validation remain shared. Seven native checks
+pass, including the reduced profile and exact header hashes. All ten SVG/PNG
+pairs were rebuilt from emitted bytes.
+
+The x86-64 fixture measures 1024 bytes for the full DeviceView object and 776
+for the selected reduced object. These are object storage, not total RAM or
+flash. The firmware measurements below are historical and have not been
+refreshed for this revision. AVR/STM32 fit and physical acceptance remain open.
+
 # Integration evidence — 2026-10-29
 
 ## 2.2 in-cell editing

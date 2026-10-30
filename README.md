@@ -12,7 +12,7 @@ Update old `ardush_*` / `ARDUSH_*` identifiers and includes together; old
 product-named aliases are not compiled into this implementation. Git history is retained.
 
 `PS_CONSOLE_PROMPT_LABEL` and `PS_CONSOLE_TITLE` default to `Console`. Prompt storage
-is checked at compile time. See the [shared profiles and defaults](https://github.com/atomicdeploy/portable-shell/blob/main/OPTIONS.md).
+is checked at compile time. See the [shared profiles and defaults](https://github.com/atomicdeploy/portable-shell/wiki/Options).
 A byte-driven C99 shell for Arduino AVR and STM32 boards, compatible with PuTTY
 and ordinary serial terminals. The optional device view uses freestanding C++11.
 No allocation, Arduino calls, OS APIs or external runtime is used in the shell
@@ -39,7 +39,7 @@ live dimensions come from the terminal probe. Plain output remains sequential.
 
 Grouped rows use collapsible uppercase sections with continuous framing; ↑/↓
 selects a heading, Enter/Space toggles it, and ←/→ collapses/expands. Overflow
-shows a proportional scrollbar in the right border. Tabs default above the table.
+shows a proportional scrollbar in a dedicated right-hand gutter by default. Tabs default above the table.
 Consumers can call `DeviceView::setSectionBorders(false)` for compact headings,
 `setGroupLayout(DeviceView::CategoryColumn)` for category columns, or
 `setTabsInsideTable(true)` for optional first-row tabs. These are the upstream
@@ -48,7 +48,7 @@ implementation and options, exported without a fork of the renderer.
 `view` keeps horizontal tabs. `view vertical` opts into a page sidebar;
 `view horizontal` selects the default explicitly. Tab / Shift+Tab change pages,
 while arrows operate table rows or matrix cells. Narrow terminals (under 64
-columns), plain output and the retained layout use horizontal navigation.
+columns) and plain output use horizontal navigation.
 Embedders call `DeviceView::setTabLayout(DeviceView::VerticalTabs)` directly.
 
 ### Full, reduced and prompt-only builds
@@ -63,12 +63,12 @@ view; applications choose feature/capacity flags to fit their own memory budget.
 | --- | --- | --- |
 | Full device view | All default shared view features | [Horizontal](previews/full.png) |
 | Full with sidebar | Same flags, runtime `VerticalTabs` | [Vertical](previews/vertical.png), [inline edit](previews/vertical-edit.png), [matrix](previews/matrix.png) |
-| Reduced retained view | `PS_DEVICE_VIEW_TABLE=0`, `PS_DEVICE_VIEW_WIDGETS=0`, `PS_DEVICE_VIEW_DIALOGS=0`, `PS_DEVICE_VIEW_MATRIX=0`, `PS_STYLE_THEMES=0`, `PS_DEVICE_VIEW_VERTICAL_TABS=0` | [Reduced](previews/reduced.png) |
+| Reduced feature profile | `PS_DEVICE_VIEW_RETAIN_ROWS=0`, `PS_DEVICE_VIEW_WIDGETS=0`, `PS_DEVICE_VIEW_DIALOGS=0`, `PS_DEVICE_VIEW_MATRIX=0`, `PS_STYLE_THEMES=0`, `PS_DEVICE_VIEW_VERTICAL_TABS=0` | [Reduced](previews/reduced.png) |
 | Prompt only | `PS_CONSOLE_ENABLE_DEVICE_VIEW=0`, as in the documented Uno build | [Prompt](previews/prompt.png) |
 
 The full and reduced pictures use the same simulated settings in
 `tests/render_profiles.cpp`. The reduced view retains text editing and page
-navigation but omits rich controls, section headings, meters, dialogs, themes
+navigation and section headings but omits rich controls, meters, dialogs, colors
 and the sidebar. The prompt-only build retains commands, history, completion
 and keyboard editing; it has no table. This small console does not include the
 full shell's tasks/jobs/variables workbench. Rendering a fixture does not prove
@@ -229,3 +229,5 @@ cmake -P tools/verify-portable-shell.cmake
 The eight vendored headers and MIT license are byte-identical snapshots recorded
 in `portable-shell.lock`. CI checks their hashes. Edit the canonical source and
 repin; do not fork fixes inside this directory.
+
+Both profiles use the same PortableShell renderer and viewport layout. Category folding and typed validation remain available independently of widgets. Reduced profiles explicitly disable optional controls, palettes, matrix rendering, dialogs or row caching; no architecture automatically selects a reduced UI. See [feature flags](https://github.com/atomicdeploy/portable-shell/wiki/Options#unified-reduced-profile).
