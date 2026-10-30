@@ -1,5 +1,26 @@
 #ifndef PORTABLE_STYLE_H
 #define PORTABLE_STYLE_H
+#ifndef PS_FOOTER_KEYCAPS
+#define PS_FOOTER_KEYCAPS 1
+#endif
+#ifndef PS_TAB_BRACKETS
+#define PS_TAB_BRACKETS 0
+#endif
+#ifndef PS_KEYCAP_STYLE
+#define PS_KEYCAP_STYLE "\033[1;7m"
+#endif
+/* Only shortcut tokens receive keycaps; descriptions retain normal styling. */
+static inline int ps_style_key_token(const char *text,unsigned length) {
+    static const char *const keys[]={"↑/↓","←/→","↑↓","↑↓←→","←","→","Space","Enter","Esc",
+        "Tab","Shift+Tab","Home/End","^U","F2","Del","Up/Down","Up/Dn","Left/Right",
+        "Left","Right","Enter/Space","W/R/O","+/-","1-9","n","d","c","/","W","R","O","F","G"};
+    unsigned i,j;
+    for(i=0;i<sizeof(keys)/sizeof(keys[0]);++i){
+        for(j=0;j<length&&keys[i][j]&&keys[i][j]==text[j];++j){}
+        if(j==length&&!keys[i][j])return 1;
+    }
+    return 0;
+}
 /* Shared desktop/device palette. No target detection, allocation or runtime. */
 #ifndef PS_STYLE_THEMES
 #define PS_STYLE_THEMES 1

@@ -195,28 +195,41 @@ template<class W> void value(Writer<W> &out,const Snapshot &s,const Row &r,unsig
 }
 
 // Exactly one context owns hints. Editing suppresses page/grid navigation.
+template<class W> void hint(Writer<W> &out,const char *text) const {
+    while(*text){
+        char token[96];unsigned n=0;
+        const bool space=(unsigned char)*text<=32;
+        while(text[n]&&((unsigned char)text[n]<=32)==space&&n+1<sizeof token){token[n]=text[n];++n;}
+        token[n]=0;
+        const bool styled=ansi_&&keycaps_&&!space&&ps_style_key_token(token,n);
+        if(styled)out.raw(PS_KEYCAP_STYLE);
+        out.raw(token);
+        if(styled){out.raw("\x1b[0m");base(out);ink(out,0);}
+        text+=n;
+    }
+}
 template<class W> void footer(Writer<W> &out,const Snapshot &s,unsigned w) const {
     if(ansi_){out.indent(0);out.position(s.lines-1);out.raw("\x1b[J");}
     base(out);ink(out,0);
     if(editing_&&dialog_&&ansi_)return; // The modal owns its only Apply/Cancel hint.
-    if(editing_){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 cursor  Enter apply  Esc cancel":w<60?"Left/Right move Enter apply Esc cancel":"Left/Right cursor Enter apply Esc cancel");out.raw("\r\n");return;}
+    if(editing_){hint(out,s.unicode?"\xe2\x86\x90/\xe2\x86\x92 cursor  Enter apply  Esc cancel":w<60?"Left/Right move Enter apply Esc cancel":"Left/Right cursor Enter apply Esc cancel");hint(out,"\r\n");return;}
     const Row *r=currentRow(s);
     if(grid_&&page_==Led){
-        out.raw(s.unicode?"\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 move":"Up/Down Left/Right");
-        out.raw(w>=60?"  W idle  R lost  O off":"  W/R/O state");
-    }else if(grid_&&page_==Pixel){out.raw(s.unicode?"\xe2\x86\x90/\xe2\x86\x92 test  G group  W/R/O color":"Left/Right test G group W/R/O color");}
-    else if(page_==Game&&grid_){out.raw(s.gameReady?"1-9 press  R reset":"AVR unavailable");}
-    else if(sectionFocus_){out.raw(w<60?"Enter/Space toggle":s.unicode?"Enter/Space toggle  \xe2\x86\x90 collapse  \xe2\x86\x92 expand":"Enter/Space toggle  Left close Right open");}
-    else {out.raw(s.unicode?"\xe2\x86\x91/\xe2\x86\x93 select":"Up/Down select");
+        hint(out,s.unicode?"\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 move":"Up/Down Left/Right");
+        hint(out,w>=60?"  W idle  R lost  O off":"  W/R/O state");
+    }else if(grid_&&page_==Pixel){hint(out,s.unicode?"\xe2\x86\x90/\xe2\x86\x92 test  G group  W/R/O color":"Left/Right test G group W/R/O color");}
+    else if(page_==Game&&grid_){hint(out,s.gameReady?"1-9 press  R reset":"AVR unavailable");}
+    else if(sectionFocus_){hint(out,w<60?"Enter/Space toggle":s.unicode?"Enter/Space toggle  \xe2\x86\x90 collapse  \xe2\x86\x92 expand":"Enter/Space toggle  Left close Right open");}
+    else {hint(out,s.unicode?"\xe2\x86\x91/\xe2\x86\x93 select":"Up/Down select");
         if(r&&r->editable&&!r->pending){
-            out.raw(PS_DEVICE_VIEW_WIDGETS&&r->kind==Toggle?"  Space toggle":PS_DEVICE_VIEW_WIDGETS&&r->kind==Choice?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 choose":"  +/- choose"):PS_DEVICE_VIEW_WIDGETS&&r->kind==Level?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 adjust":"  +/- adjust"):"  Enter edit");
-            if(w>=70&&r->kind==Level)out.raw("  Enter edit");
-            if(w>=90&&PS_DEVICE_VIEW_DIALOGS)out.raw("  F2 dialog");
+            hint(out,PS_DEVICE_VIEW_WIDGETS&&r->kind==Toggle?"  Space toggle":PS_DEVICE_VIEW_WIDGETS&&r->kind==Choice?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 choose":"  +/- choose"):PS_DEVICE_VIEW_WIDGETS&&r->kind==Level?(s.unicode?"  \xe2\x86\x90/\xe2\x86\x92 adjust":"  +/- adjust"):"  Enter edit");
+            if(w>=70&&r->kind==Level)hint(out,"  Enter edit");
+            if(w>=90&&PS_DEVICE_VIEW_DIALOGS)hint(out,"  F2 dialog");
         }
     }
-    out.raw("\r\n");
-    if(page_==Led||page_==Pixel||page_==Game)out.raw(grid_?"F settings  ":page_==Led?"F matrix  ":page_==Game?"F game  ":"F pixels  ");
-    out.raw(w>=70?"Tab pages  Shift+Tab previous  Esc close":"Tab pages  Esc close");
+    hint(out,"\r\n");
+    if(page_==Led||page_==Pixel||page_==Game)hint(out,grid_?"F settings  ":page_==Led?"F matrix  ":page_==Game?"F game  ":"F pixels  ");
+    hint(out,w>=70?"Tab pages  Shift+Tab previous  Esc close":"Tab pages  Esc close");
     if(ansi_)out.raw("\x1b[K");else out.raw("\r\n");
 }
 
@@ -252,7 +265,7 @@ template<class W> void sidebar(Writer<W> &out,const Snapshot &s,unsigned height)
             if(page<PageCount){
                 const bool active=page==page_;
                 if(active&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
-                out.raw(active?"[":" ");out.raw(pageName(page));out.raw(active?"]":" ");base(out);
+                out.raw(active&&(tabBrackets_||!ansi_||!PS_STYLE_THEMES)?"[":" ");out.raw(pageName(page));out.raw(active&&(tabBrackets_||!ansi_||!PS_STYLE_THEMES)?"]":" ");base(out);
                 out.field("",14-unsigned(ps_text_length(pageName(page))));++page;
             }else out.field("",16);
         }
@@ -340,7 +353,7 @@ template<class Write> bool renderTable(const Snapshot &s,Write write) {
     for(unsigned i=0;i<PageCount;++i){
         if(offset||!pageAvailable(i,s)||(tabTotal>w-4&&i!=page_))continue;
         if(i==page_&&ansi_)out.raw(ps_style_surface(theme_,trueColor_,1));else ink(out,0);
-        out.raw(i==page_?"[":" ");out.raw(pageName(i));out.raw(i==page_?"]":" ");base(out);
+        out.raw(i==page_&&(tabBrackets_||!ansi_||!PS_STYLE_THEMES)?"[":" ");out.raw(pageName(i));out.raw(i==page_&&(tabBrackets_||!ansi_||!PS_STYLE_THEMES)?"]":" ");base(out);
         out.raw(" "); // Inter-tab spacing is outside the selected surface.
         used+=unsigned(ps_text_length(pageName(i)))+3;
     }
