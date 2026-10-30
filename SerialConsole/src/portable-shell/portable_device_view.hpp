@@ -404,10 +404,11 @@ class DeviceView {
                                                       : snapshot.columns;
         // UTF-8 wire bytes are char-based under both C++17 and C++23.
         out.raw(snapshot.unicode ? "\xe2\x95\xad\xe2\x94\x80 " : "+- ");
-        out.safe(snapshot.title, width - 10);
         char titleMeasure[101];
-        const size_t titleSize = terminalText(titleMeasure, width - 9, snapshot.title);
-        for (size_t k = titleSize + 4; k < width - 1; ++k)
+        const size_t titleSize = terminalText(titleMeasure, width - 10, snapshot.title);
+        out.raw(titleMeasure);
+        out.raw(" ");
+        for (size_t k = titleSize + 4; k < width - 2; ++k)
             out.raw(snapshot.unicode ? "\xe2\x94\x80" : "-");
         out.raw(snapshot.unicode ? "\xe2\x95\xae" : "+");
         if (ansi_) {
@@ -418,6 +419,9 @@ class DeviceView {
             out.raw(snapshot.unicode?"Resize terminal to 40 \xc3\x97 16\r\n":"Resize terminal to 40 x 16\r\n");
             return true;
         }
+        if (ansi_) out.raw("\x1b[31m");
+        out.raw(snapshot.unicode ? "\xe2\x94\x82 " : "| ");
+        size_t tabUsed = 0;
         for (uint8_t i = 0; i < PageCount; ++i) {
             if ((i == Led && (!PS_DEVICE_VIEW_DIAGNOSTICS || !snapshot.canLeds)) ||
                 (i == Pixel && !pixels(snapshot)))
@@ -432,9 +436,7 @@ class DeviceView {
                 continue;
             if (width < 80 && i != page_)
                 continue;
-            if (ansi_)
-                out.raw(i == page_ ? "\x1b[1;35m" : "\x1b[90m");
-            out.raw(i == Device         ? " Device "
+            const char *label = i == Device         ? " Device "
                     : i == Network      ? " Network "
                     : i == Led          ? " LEDs "
                     : i == Pixel        ? " Pixels "
@@ -442,10 +444,20 @@ class DeviceView {
                     : i == TerminalPage ? " Term "
                     : i == Cloud        ? " Cloud "
                     : i == Clock        ? " Time "
-                                        : " Notify ");
+                                        : " Notify ";
+            const size_t tabWidth = ps_text_length(label);
+            if (tabWidth > width - 5 - tabUsed) continue;
+            if (ansi_)
+                out.raw(i == page_ ? "\x1b[1;35m" : "\x1b[90m");
+            out.raw(label);
+            tabUsed += tabWidth;
             if (ansi_)
                 out.raw("\x1b[0m");
         }
+        out.field("", width - 5 - tabUsed);
+        if (ansi_) out.raw("\x1b[31m");
+        out.raw(snapshot.unicode ? " \xe2\x94\x82" : " |");
+        if (ansi_) out.raw("\x1b[0m");
         out.raw("\r\n");
         if (ansi_)
             out.raw("\x1b[31m");

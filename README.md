@@ -19,13 +19,17 @@ editor, Telnet and TUI fixes belong upstream, then are repinned here. The origin
 2018 sketch and MIT attribution remain in Git history; every original command
 is retained. See [comparison and validation](VALIDATION.md).
 
-![Actual emitted bytes replayed with One Dark and Agave; simulated LED](previews/device.png)
+![Actual emitted bytes replayed with the default Violet theme and Agave; simulated LED](previews/device.png)
 
 This is a byte-stream replay fixture, not a physical board screenshot. Other
 checked frames: [inline draft](previews/edit.png), [transport](previews/transport.png),
 [terminal](previews/terminal.png). Red rounded borders, magenta selection, two
 columns, contextual footer, tabs and an alternate screen come from the shared
 renderer. The documented Uno command explicitly omits the view for its 2 KB SRAM budget. Architecture alone never removes UI features.
+
+The previews were regenerated from the current pinned renderer on 2026-10-30.
+Both table layouts now close the tab row at both edges; the retained layout also
+measures clipped titles consistently so the top-right corner stays aligned.
 
 ## Build and connect
 
