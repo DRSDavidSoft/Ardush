@@ -1,5 +1,7 @@
 # SerialConsole
 
+[🧭 Clickable architecture and data-flow diagrams](ARCHITECTURE.md)
+
 Interactive views accept SGR mouse bytes: click tabs, rows and values; scroll the
 wheel, drag levels or the scrollbar, and right-click a value to edit its dialog.
 Terminal reporting is released on view exit. `PS_MOUSE=0` excludes mouse handling.
