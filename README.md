@@ -31,6 +31,37 @@ The previews were regenerated from the current pinned renderer on 2026-10-30.
 Both table layouts now close the tab row at both edges; the retained layout also
 measures clipped titles consistently so the top-right corner stays aligned.
 
+### Rebuild or check README images
+
+From the repository root, with CMake 3.20+ and a C/C++ compiler:
+
+```text
+cmake -DMODE=UPDATE -P tools/rebuild-previews.cmake
+cmake -P tools/rebuild-previews.cmake
+```
+
+`UPDATE` rebuilds all four SVG/PNG pairs; commit the resulting `previews/` changes.
+The default `CHECK` mode leaves committed files untouched and fails for missing,
+stale or unmanaged images. CMake builds also expose `previews_update` and
+`previews_check` targets. Use `-DGENERATOR=Ninja` when selecting a generator for
+the first run, or `-DBUILD_DIR=/path/to/cache` to move the isolated host-tool cache.
+
+The script compiles the actual consumer fixture against the current vendored
+headers, replays its emitted bytes using the checksum-pinned canonical C utility,
+and rasterizes with pinned **resvg 0.45.1** and **Agave** at twice resolution.
+System fonts are disabled. Tool archives, replay source, font and its OFL license
+are downloaded over verified TLS and checked against SHA-256 pins in
+`tools/previews/dependencies.cmake`; later runs reuse the verified cache. Image
+tools are build-only dependencies and never enter the shell or firmware.
+Automatic renderer downloads support x86-64 Windows, Linux and macOS; other
+hosts can supply `-DRESVG=/path/to/resvg` with the pinned version.
+
+Every push and PR checks exact SVG **and PNG** bytes on Linux and Windows,
+including a negative test proving stale/missing images fail. Fresh renders are
+uploaded as CI artifacts even on failure. A renderer, adapter, theme, fixture or
+font change therefore requires rebuilding the affected committed images; updating
+the shared-source lock alone does not refresh pictures.
+
 ## Build and connect
 
 Open `SerialConsole/SerialConsole.ino` in Arduino IDE, or use Arduino CLI. The commands below

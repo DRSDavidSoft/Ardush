@@ -3,6 +3,29 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  previews:
+    name: previews (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: build/previews/dependencies
+          key: previews-${{ runner.os }}-${{ hashFiles('tools/previews/dependencies.cmake') }}
+      - name: Check committed SVG and PNG images
+        run: cmake -P tools/rebuild-previews.cmake
+      - name: Verify the stale-image guard
+        run: cmake -P tests/preview_guard.cmake
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-previews-${{ runner.os }}
+          path: build/previews/generated/
+          if-no-files-found: warn
   native:
     strategy:
       matrix:
